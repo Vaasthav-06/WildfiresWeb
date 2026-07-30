@@ -110,7 +110,7 @@ class WildfirePredictor:
         return results
 
     def predict_heatmap(self, resolution: float = 0.5) -> list[dict]:
-        import time
+        import requests
         from ..weather.client import weather_client
 
         bounds = config.india_bounds
@@ -168,8 +168,6 @@ class WildfirePredictor:
                         "lon": lon,
                         "risk": round(risk, 2),
                     })
-
-            time.sleep(0.5)
 
         return all_points
 
