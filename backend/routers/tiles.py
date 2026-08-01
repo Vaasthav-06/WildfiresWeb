@@ -9,14 +9,14 @@ GEOJSON_PATH = DATA_DIR / "india.geojson"
 with open(GEOJSON_PATH) as f:
     _geojson = json.load(f)
 
-IMG_W = 1400
-IMG_H = 1800
+IMG_W = 700
+IMG_H = 900
 _LAT_S = 4.0
 _LON_W = 64.0
 _LAT_N = 40.0
 _LON_E = 100.0
-CIRCLE_R = 12
-BLUR_R = 8
+CIRCLE_R = 6
+BLUR_R = 5
 
 _heatmap_image: bytes | None = None
 _india_mask: Image.Image | None = None

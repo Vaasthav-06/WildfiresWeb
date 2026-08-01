@@ -13,11 +13,21 @@ import AlertMarkerLayer from "@/components/map/AlertMarkerLayer";
 const IMG_URL = api("/api/v1/heatmap-image.png");
 const IMG_BOUNDS: L.LatLngBoundsExpression = [[3.0, 64.0], [39.0, 100.0]];
 
+function preloadImage(url: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = url;
+  });
+}
+
 export default function MapView() {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const overlayRef = useRef<L.ImageOverlay | null>(null);
   const markerRef = useRef<L.CircleMarker | null>(null);
+  const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const heatmapVisible = useAppStore((s) => s.heatmapVisible);
@@ -59,16 +69,25 @@ export default function MapView() {
       }
     });
 
-    const overlay = L.imageOverlay(IMG_URL, IMG_BOUNDS, { opacity: 0.5, zIndex: 400 });
-    overlay.on("load", () => { overlayRef.current = overlay; setLoading(false); });
-    overlay.on("error", () => setLoading(false));
-    overlay.addTo(map);
-
-    setTimeout(() => setLoading(false), 10000);
+    preloadImage(IMG_URL).then((ok) => {
+      if (!mapRef.current) return;
+      const overlay = L.imageOverlay(IMG_URL, IMG_BOUNDS, { opacity: 0.5, zIndex: 400 });
+      overlay.on("load", () => {
+        overlayRef.current = overlay;
+        setReady(true);
+      });
+      overlay.on("error", () => setReady(true));
+      overlay.addTo(map);
+      if (!ok) setReady(true);
+    });
 
     mapRef.current = map;
     return () => { map.remove(); mapRef.current = null; };
   }, []);
+
+  useEffect(() => {
+    setLoading(!ready);
+  }, [ready]);
 
   useEffect(() => {
     if (overlayRef.current) overlayRef.current.setOpacity(heatmapVisible ? 0.5 : 0);
