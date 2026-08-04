@@ -2,11 +2,16 @@ import json
 import logging
 from fastapi import APIRouter, HTTPException, Depends, status
 from backend.schemas.auth_schemas import ZoneCreate, ZoneOut
-from backend.services.database import query, execute, execute_returning
+from backend.services.database import query, execute, execute_returning, is_available
 from backend.middleware.auth_middleware import require_admin
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
+
+
+def _check_db():
+    if not is_available():
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database not available")
 
 
 @router.get("/zones", response_model=list[ZoneOut])

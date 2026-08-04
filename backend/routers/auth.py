@@ -5,12 +5,19 @@ from backend.services.auth_service import (
     decode_token, create_user, list_users, update_user, get_user_by_id,
 )
 from backend.middleware.auth_middleware import get_current_user, require_admin
+from backend.services.database import is_available
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
+def _check_db():
+    if not is_available():
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database not available")
+
+
 @router.post("/login", response_model=TokenResponse)
 def login(req: LoginRequest):
+    _check_db()
     user = authenticate_user(req.email, req.password)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")

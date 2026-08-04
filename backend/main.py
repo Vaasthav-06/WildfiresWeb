@@ -23,9 +23,17 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     from backend.routers.heatmap import start_heatmap_worker
     from backend.services.firms import start_firms_worker
-    from backend.services.database import get_pool
+    import threading
 
-    get_pool()
+    def _init_db():
+        try:
+            from backend.services.database import get_pool
+            get_pool()
+        except Exception as e:
+            logger.warning(f"Database init skipped: {e}")
+
+    threading.Thread(target=_init_db, daemon=True).start()
+
     start_heatmap_worker()
     if os.environ.get("FIRMS_API_KEY"):
         start_firms_worker()
