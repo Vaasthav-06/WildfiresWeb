@@ -65,6 +65,14 @@ class WildfireEngineConfig:
     cache_ttl_minutes: int = 60
     analytics_cache_ttl_minutes: int = 720
 
+    database_url: str = ""
+    jwt_secret: str = ""
+
+    @property
+    def db_url(self) -> str:
+        import os
+        return self.database_url or os.environ.get("DATABASE_URL", "")
+
     evi_fallback: float = 0.35
     spread_risk_threshold: float = 0.40
 

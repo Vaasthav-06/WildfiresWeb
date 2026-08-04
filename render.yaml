@@ -11,5 +11,9 @@ services:
         value: ddd2b8a0e248043cd289a751d54304cf
       - key: PYTHONPATH
         value: /app
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
     healthCheckPath: /health
     plan: free

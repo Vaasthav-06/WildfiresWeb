@@ -23,7 +23,9 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     from backend.routers.heatmap import start_heatmap_worker
     from backend.services.firms import start_firms_worker
+    from backend.services.database import get_pool
 
+    get_pool()
     start_heatmap_worker()
     if os.environ.get("FIRMS_API_KEY"):
         start_firms_worker()
