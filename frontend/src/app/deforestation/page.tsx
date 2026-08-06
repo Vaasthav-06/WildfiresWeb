@@ -61,7 +61,7 @@ export default function DeforestationPage() {
   const plotH = chartH - pad.top - pad.bottom;
 
   return (
-    <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-[#0F172A]">
+    <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-white">
       <aside className="w-[380px] shrink-0 overflow-y-auto bg-white border-r border-slate-200 p-5">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex items-center gap-2"><Trees className="h-5 w-5 text-emerald-600" /><h1 className="text-[18px] font-bold text-slate-900">Deforestation Monitor</h1></div>
@@ -107,17 +107,17 @@ export default function DeforestationPage() {
         )}
       </aside>
 
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col bg-white">
         {loading && <div className="flex flex-1 items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" /></div>}
 
         {!loading && data && (
           <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-700">
-              <div className="flex items-center gap-2"><BarChart3 className="h-4 w-4 text-emerald-400" /><h2 className="text-[14px] font-bold text-white">{data.zone_name} — Vegetation Index Trend</h2></div>
-              <p className="text-[12px] text-slate-400 mt-0.5">{data.summary.first_year} – {data.summary.last_year} · {data.state}</p>
+            <div className="px-6 py-4 border-b border-slate-200 bg-white">
+              <div className="flex items-center gap-2"><BarChart3 className="h-4 w-4 text-emerald-600" /><h2 className="text-[14px] font-bold text-slate-900">{data.zone_name} — Vegetation Trend ({data.summary.first_year}–{data.summary.last_year})</h2></div>
+              <p className="text-[12px] text-slate-500 mt-0.5">{data.state} · {Math.abs(data.summary.ndvi_change * 100).toFixed(1)}% NDVI change over {data.summary.last_year - data.summary.first_year} years</p>
             </div>
 
-            <div className="flex-1 flex items-center justify-center overflow-auto p-4">
+            <div className="flex-1 flex items-center justify-center overflow-auto p-6 bg-[#F8FAFC]">
               <svg viewBox={`0 0 ${chartW} ${chartH}`} width={chartW} height={chartH} className="max-w-full">
                 {/* Grid lines */}
                 {[0, 0.25, 0.5, 0.75, 1].map((frac) => {
@@ -125,15 +125,15 @@ export default function DeforestationPage() {
                   const val = ndviRange.min + (ndviRange.max - ndviRange.min) * frac;
                   return (
                     <g key={frac}>
-                      <line x1={pad.left} y1={y} x2={pad.left + plotW} y2={y} stroke="#334155" strokeWidth={0.5} />
-                      <text x={pad.left - 6} y={y + 4} textAnchor="end" fill="#64748B" fontSize={10}>{val.toFixed(2)}</text>
+                      <line x1={pad.left} y1={y} x2={pad.left + plotW} y2={y} stroke="#E2E8F0" strokeWidth={0.5} />
+                      <text x={pad.left - 6} y={y + 4} textAnchor="end" fill="#94A3B8" fontSize={10}>{val.toFixed(2)}</text>
                     </g>
                   );
                 })}
                 {/* X labels */}
                 {yearly.filter((_, i) => i % 3 === 0).map((p) => {
                   const x = pad.left + ((p.year - yearly[0].year) / (yearly.length - 1)) * plotW;
-                  return <text key={p.year} x={x} y={chartH - 8} textAnchor="middle" fill="#64748B" fontSize={10}>{p.year}</text>;
+                  return <text key={p.year} x={x} y={chartH - 8} textAnchor="middle" fill="#94A3B8" fontSize={10}>{p.year}</text>;
                 })}
                 {/* NDVI Line */}
                 <polyline
@@ -144,28 +144,46 @@ export default function DeforestationPage() {
                     return `${x},${y}`;
                   }).join(" ")}
                 />
-                {/* Data points */}
+                {/* Declining area fill */}
+                <polygon
+                  fill="#FEE2E2" fillOpacity={0.4}
+                  points={
+                    yearly.map((p, i) => {
+                      const x = pad.left + (i / (yearly.length - 1)) * plotW;
+                      const y = pad.top + plotH * (1 - (p.avg_ndvi - ndviRange.min) / (ndviRange.max - ndviRange.min));
+                      return `${x},${y}`;
+                    }).join(" ") +
+                    ` ${pad.left + plotW},${pad.top + plotH} ${pad.left},${pad.top + plotH}`
+                  }
+                />
+                {/* Data points with % change labels */}
                 {yearly.map((p, i) => {
                   const x = pad.left + (i / (yearly.length - 1)) * plotW;
                   const y = pad.top + plotH * (1 - (p.avg_ndvi - ndviRange.min) / (ndviRange.max - ndviRange.min));
+                  const pctChange = yearly[0].avg_ndvi > 0 ? ((p.avg_ndvi - yearly[0].avg_ndvi) / yearly[0].avg_ndvi) * 100 : 0;
                   return (
                     <g key={p.year}>
                       <circle cx={x} cy={y} r={3} fill="#16A34A" stroke="white" strokeWidth={1.5} />
-                      {i % 4 === 0 && <text x={x} y={y - 10} textAnchor="middle" fill="#22C55E" fontSize={9} fontWeight="bold">{p.avg_ndvi.toFixed(3)}</text>}
+                      {i % 4 === 0 && (
+                        <>
+                          <text x={x} y={y - 12} textAnchor="middle" fill="#16A34A" fontSize={9} fontWeight="bold">{p.avg_ndvi.toFixed(3)}</text>
+                          <text x={x} y={y + 16} textAnchor="middle" fill={pctChange < 0 ? "#DC2626" : "#16A34A"} fontSize={9} fontWeight="bold">{pctChange > 0 ? "+" : ""}{pctChange.toFixed(1)}%</text>
+                        </>
+                      )}
                     </g>
                   );
                 })}
               </svg>
             </div>
 
-            <div className="flex-1 border-t border-slate-700">
+            <div className="border-t border-slate-200">
               <ZoneMap year={2025} zoneId={zoneId} side="left" onYearChange={() => {}} />
             </div>
           </div>
         )}
 
         {!loading && !data && zoneId && (
-          <div className="flex flex-1 items-center justify-center text-slate-400">No vegetation data available for this zone yet.</div>
+          <div className="flex flex-1 items-center justify-center bg-[#F8FAFC] text-slate-400">No vegetation data available for this zone yet.</div>
         )}
       </main>
     </div>
