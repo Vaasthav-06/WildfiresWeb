@@ -43,8 +43,8 @@ export default function NDVIMap({ year, zoneId, side, onYearChange }: Props) {
     if (ndviRef.current) mapRef.current.removeLayer(ndviRef.current);
     const date = `${year}-07-01`;
     ndviRef.current = L.tileLayer(
-      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_NDVI_16Day/default/${date}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
-      { attribution: "NASA GIBS MODIS NDVI", opacity: 0.7, maxZoom: 12 }
+      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/${date}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
+      { attribution: "NASA GIBS MODIS", opacity: 0.85, maxZoom: 12 }
     ).addTo(mapRef.current);
   }, [year]);
 

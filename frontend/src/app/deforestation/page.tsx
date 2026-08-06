@@ -59,7 +59,8 @@ export default function DeforestationPage() {
             <h1 className="text-[18px] font-bold text-slate-900">Deforestation Monitor</h1>
           </div>
           <p className="mt-1.5 text-[13px] text-slate-500 leading-relaxed">
-            Compare vegetation health using NASA MODIS NDVI data (250m). Each map shows vegetation index for the selected year.
+            Compare vegetation health using NASA MODIS calibrated true-color satellite imagery (250m resolution).
+            Dark green areas indicate dense forest. Brown/red patches indicate deforestation or bare soil.
           </p>
         </motion.div>
 
@@ -102,18 +103,17 @@ export default function DeforestationPage() {
         <div className="mt-5 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 p-4 ring-1 ring-emerald-100">
           <div className="flex items-center gap-2 mb-3">
             <Activity className="h-3.5 w-3.5 text-emerald-600" />
-            <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-600">NDVI Guide</p>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-600">Layer Guide</p>
           </div>
           {[
-            { range: "0.6 – 1.0", label: "Dense vegetation", color: "#166534" },
-            { range: "0.3 – 0.6", label: "Moderate vegetation", color: "#16A34A" },
-            { range: "0.1 – 0.3", label: "Sparse vegetation", color: "#F59E0B" },
-            { range: "-0.1 – 0.1", label: "Bare / Urban", color: "#F97316" },
-            { range: "< -0.1", label: "Water / None", color: "#DC2626" },
+            { color: "#166534", label: "Dense forest" },
+            { color: "#16A34A", label: "Vegetation" },
+            { color: "#CA8A04", label: "Sparse / Cropland" },
+            { color: "#B45309", label: "Bare soil / Urban" },
+            { color: "#7C2D12", label: "Deforested / Water" },
           ].map((item) => (
             <div key={item.label} className="flex items-center gap-2">
               <span className="h-3 w-3 rounded" style={{ background: item.color }} />
-              <span className="text-[11px] text-slate-500 w-16">{item.range}</span>
               <span className="text-[12px] font-medium text-slate-700">{item.label}</span>
             </div>
           ))}
@@ -122,7 +122,7 @@ export default function DeforestationPage() {
         <div className="mt-4 rounded-xl bg-slate-50 p-4">
           <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Data Source</p>
           <p className="mt-2 text-[12px] text-slate-500 leading-relaxed">
-            NASA GIBS MODIS/Terra Vegetation Indices (MOD13Q1). 16-day composites at 250m resolution, available from 2000–present.
+            NASA GIBS MODIS/Terra Corrected Reflectance (True Color). 250m resolution, 16-day composites, calibrated for consistent comparison across years (2000–present).
           </p>
         </div>
       </aside>
@@ -156,7 +156,7 @@ export default function DeforestationPage() {
             <div><p className="text-[10px] uppercase tracking-wider text-slate-400">Period</p><p className="text-[13px] font-medium text-white">{rightYear - leftYear} years</p></div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-[11px] text-slate-400">Darker green = healthier</span>
+            <span className="text-[11px] text-slate-400">Green = healthy vegetation | Brown/red = deforestation</span>
             <div className="h-4 w-24 rounded" style={{ background: "linear-gradient(to right, #DC2626, #F97316, #F59E0B, #16A34A, #166534)" }} />
           </div>
         </div>
