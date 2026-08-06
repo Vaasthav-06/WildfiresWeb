@@ -33,10 +33,10 @@ export default function DeforestationPage() {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    fetch(api("/api/v1/admin/zones"), { headers: getHeaders() })
+    fetch(api("/api/v1/deforestation/zones"), { headers: getHeaders() })
       .then((r) => (r.ok ? r.json() : []))
       .then((z: Zone[]) => {
-        setZones(z.sort((a, b) => a.name.localeCompare(b.name)));
+        setZones(z);
         if (z.length > 0) setZoneId(z[0].id);
       });
   }, [isAuthenticated, getHeaders]);

@@ -5,6 +5,17 @@ from backend.middleware.auth_middleware import get_current_user
 router = APIRouter(prefix="/api/v1/deforestation", tags=["deforestation"])
 
 
+@router.get("/zones")
+def list_zones_with_data(user: dict = Depends(get_current_user)):
+    rows = query(
+        """SELECT DISTINCT z.id, z.name, z.type, z.state
+           FROM zones z
+           INNER JOIN vegetation_history v ON z.id = v.zone_id
+           ORDER BY z.name"""
+    )
+    return [{"id": r["id"], "name": r["name"], "type": r["type"], "state": r.get("state")} for r in rows]
+
+
 @router.get("/{zone_id}")
 def get_zone_history(zone_id: int, user: dict = Depends(get_current_user)):
     yearly = query(
