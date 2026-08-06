@@ -1,10 +1,11 @@
 "use client";
 
+import { useMemo } from "react";
 import { useAppStore } from "@/stores/appStore";
-import { usePrediction } from "@/hooks/usePrediction";
+import { useHeatmap } from "@/hooks/useHeatmap";
 import { PANEL, RISK_COLORS } from "@/lib/constants";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Thermometer, Droplets, Wind, MapPin, Activity } from "lucide-react";
+import { X, MapPin, Activity } from "lucide-react";
 
 function riskTier(risk: number): keyof typeof RISK_COLORS {
   if (risk < 20) return "low";
@@ -22,12 +23,27 @@ function riskLabel(risk: number): string {
   return "Extreme";
 }
 
+function findNearest(lat: number, lon: number, points: Array<{ lat: number; lon: number; risk: number }>) {
+  let best = points[0];
+  let bestDist = Infinity;
+  for (const p of points) {
+    const d = (p.lat - lat) ** 2 + (p.lon - lon) ** 2;
+    if (d < bestDist) { bestDist = d; best = p; }
+  }
+  return best;
+}
+
 export default function PredictionModal() {
   const selectedPoint = useAppStore((s) => s.selectedPoint);
   const setSelectedPoint = useAppStore((s) => s.setSelectedPoint);
   const predictionMode = useAppStore((s) => s.predictionMode);
-  const { data, isLoading } = usePrediction(selectedPoint?.lat ?? null, selectedPoint?.lon ?? null);
+  const { data: heatmap } = useHeatmap();
   const open = predictionMode && selectedPoint !== null;
+
+  const nearest = useMemo(() => {
+    if (!selectedPoint || !heatmap?.points?.length) return null;
+    return findNearest(selectedPoint.lat, selectedPoint.lon, heatmap.points);
+  }, [selectedPoint, heatmap]);
 
   return (
     <AnimatePresence>
@@ -53,61 +69,59 @@ export default function PredictionModal() {
 
             <p className="mb-4 text-[11px] font-bold uppercase tracking-widest text-slate-400">Point Analysis</p>
 
-            {isLoading ? (
-              <div className="flex justify-center py-8">
-                <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
-              </div>
-            ) : data ? (
+            {nearest ? (
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-[13px] text-slate-500">
                   <MapPin className="h-3.5 w-3.5" />
-                  <span className="font-mono text-slate-700">{selectedPoint.lat.toFixed(4)}, {selectedPoint.lon.toFixed(4)}</span>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-lg bg-slate-50 p-3 text-center">
-                    <Thermometer className="mx-auto mb-1 h-3.5 w-3.5 text-slate-400" />
-                    <div className="text-[13px] font-semibold text-slate-800">{data.temperature}°C</div>
-                  </div>
-                  <div className="rounded-lg bg-slate-50 p-3 text-center">
-                    <Droplets className="mx-auto mb-1 h-3.5 w-3.5 text-slate-400" />
-                    <div className="text-[13px] font-semibold text-slate-800">{data.humidity}%</div>
-                  </div>
-                  <div className="rounded-lg bg-slate-50 p-3 text-center">
-                    <Wind className="mx-auto mb-1 h-3.5 w-3.5 text-slate-400" />
-                    <div className="text-[13px] font-semibold text-slate-800">{data.wind} m/s</div>
-                  </div>
+                  <span className="font-mono text-slate-700">
+                    {selectedPoint!.lat.toFixed(4)}, {selectedPoint!.lon.toFixed(4)}
+                  </span>
                 </div>
 
                 <div className="rounded-lg bg-slate-50 p-4">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-[13px] text-slate-500">Fire Risk</span>
-                    <span className="text-[13px] font-semibold text-slate-700">{riskLabel(data.wildfire_risk)}</span>
+                    <span className="text-[13px] font-semibold text-slate-700">{riskLabel(nearest.risk)}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="h-2 flex-1 rounded-full bg-slate-200">
                       <div
                         className="h-2 rounded-full transition-all"
                         style={{
-                          width: `${Math.min(100, data.wildfire_risk)}%`,
-                          backgroundColor: RISK_COLORS[riskTier(data.wildfire_risk)],
+                          width: `${Math.min(100, nearest.risk)}%`,
+                          backgroundColor: RISK_COLORS[riskTier(nearest.risk)],
                         }}
                       />
                     </div>
-                    <span className="text-[13px] font-bold tabular-nums" style={{ color: RISK_COLORS[riskTier(data.wildfire_risk)] }}>
-                      {data.wildfire_risk.toFixed(1)}%
+                    <span className="text-[13px] font-bold tabular-nums" style={{ color: RISK_COLORS[riskTier(nearest.risk)] }}>
+                      {nearest.risk.toFixed(1)}%
                     </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400">
+                  <div className="rounded-lg bg-slate-50 p-2 text-center">
+                    <span className="block text-[10px] uppercase tracking-wider">Grid Point</span>
+                    <span className="font-mono text-slate-600">{nearest.lat.toFixed(2)}°, {nearest.lon.toFixed(2)}°</span>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-2 text-center">
+                    <span className="block text-[10px] uppercase tracking-wider">Resolution</span>
+                    <span className="text-slate-600">0.5° grid</span>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 rounded-lg bg-blue-50 p-3">
                   <Activity className="h-3.5 w-3.5 text-blue-600" />
                   <span className="text-[12px] text-blue-700">
-                    Fire Risk Index: <strong>{riskLabel(data.wildfire_risk)}</strong>
+                    Risk label: <strong>{riskLabel(nearest.risk)}</strong> — matches heatmap overlay color
                   </span>
                 </div>
               </div>
-            ) : null}
+            ) : (
+              <div className="flex justify-center py-8">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+              </div>
+            )}
           </motion.div>
         </motion.div>
       )}
