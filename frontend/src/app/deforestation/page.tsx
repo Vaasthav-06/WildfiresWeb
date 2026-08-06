@@ -36,9 +36,8 @@ export default function DeforestationPage() {
     fetch(api("/api/v1/admin/zones"), { headers: getHeaders() })
       .then((r) => (r.ok ? r.json() : []))
       .then((z: Zone[]) => {
-        const reserves = z.filter((x: Zone) => x.type === "reserve");
-        setZones(reserves);
-        if (reserves.length > 0) setZoneId(reserves[0].id);
+        setZones(z.sort((a, b) => a.name.localeCompare(b.name)));
+        if (z.length > 0) setZoneId(z[0].id);
       });
   }, [isAuthenticated, getHeaders]);
 
@@ -74,7 +73,9 @@ export default function DeforestationPage() {
           {zones.map((z) => (
             <button key={z.id} onClick={() => setZoneId(z.id)}
               className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-all text-[13px] mb-1 ${zoneId === z.id ? "bg-emerald-600 text-white shadow-md shadow-emerald-200" : "text-slate-600 hover:bg-emerald-50"}`}>
-              <Map className="h-3.5 w-3.5 shrink-0" /><span className="font-medium truncate">{z.name}</span>
+              <Map className="h-3.5 w-3.5 shrink-0" />
+              <span className="font-medium truncate flex-1">{z.name}</span>
+              <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${zoneId === z.id ? "bg-white/20 text-white" : "bg-slate-100 text-slate-400"}`}>{z.type.replace("_", " ")}</span>
             </button>
           ))}
         </div>
