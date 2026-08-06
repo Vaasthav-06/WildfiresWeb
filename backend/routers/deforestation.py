@@ -5,7 +5,6 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from backend.services.database import query
-from backend.middleware.auth_middleware import get_current_user
 
 router = APIRouter(prefix="/api/v1/deforestation", tags=["deforestation"])
 
@@ -62,7 +61,7 @@ class AnalyzeAreaRequest(BaseModel):
 
 
 @router.post("/analyze-area")
-def analyze_area(body: AnalyzeAreaRequest, user: dict = Depends(get_current_user)):
+def analyze_area(body: AnalyzeAreaRequest):
     lat_min, lat_max = sorted([body.lat1, body.lat2])
     lon_min, lon_max = sorted([body.lon1, body.lon2])
 
@@ -173,7 +172,7 @@ def analyze_area(body: AnalyzeAreaRequest, user: dict = Depends(get_current_user
 
 
 @router.get("/map-data")
-def get_map_data(user: dict = Depends(get_current_user)):
+def get_map_data():
     rows = query(
         """SELECT z.id, z.name, z.type, z.state,
                   ST_AsGeoJSON(z.geom) as geojson,
@@ -209,7 +208,7 @@ def get_map_data(user: dict = Depends(get_current_user)):
 
 
 @router.get("/{zone_id}")
-def get_zone_history(zone_id: int, user: dict = Depends(get_current_user)):
+def get_zone_history(zone_id: int):
     yearly = query(
         """SELECT year, ROUND(AVG(ndvi)::numeric, 4) as avg_ndvi,
                   ROUND(AVG(vegetation_cover_pct)::numeric, 1) as avg_cover,

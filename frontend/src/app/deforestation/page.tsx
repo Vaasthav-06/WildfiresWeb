@@ -1,9 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { useAuth } from "@/components/auth/AuthProvider";
 import { api } from "@/lib/constants";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, TrendingDown, TrendingUp, Minus, Trees, Square, Activity, Crosshair } from "lucide-react";
@@ -33,8 +31,6 @@ function TrendBadge({ trend, change }: { trend: string; change: number }) {
 }
 
 export default function DeforestationPage() {
-  const { isAuthenticated, isLoading } = useAuth();
-  const router = useRouter();
   const [features, setFeatures] = useState<ZoneFeature[]>([]);
   const [selected, setSelected] = useState<ZoneFeature | null>(null);
   const [detail, setDetail] = useState<ZoneDetail | null>(null);
@@ -49,9 +45,7 @@ export default function DeforestationPage() {
     });
   }, []);
 
-  useEffect(() => { if (!isLoading && !isAuthenticated) router.push("/login"); }, [isLoading, isAuthenticated, router]);
-
-  const onRectDraw = useCallback(async (swLat: number, swLng: number, neLat: number, neLng: number, token: string) => {
+  const onRectDraw = useCallback(async (swLat: number, swLng: number, neLat: number, neLng: number) => {
     setHasRect(true);
     setSelected(null);
     setDLoading(true);
@@ -59,7 +53,7 @@ export default function DeforestationPage() {
     try {
       const r = await fetch(api("/api/v1/deforestation/analyze-area"), {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lat1: swLat, lon1: swLng, lat2: neLat, lon2: neLng }),
       });
       if (r.ok) {
@@ -70,21 +64,17 @@ export default function DeforestationPage() {
     } catch {} finally { setDLoading(false); }
   }, []);
 
-  const onZoneClick = useCallback(async (z: ZoneFeature, token: string) => {
+  const onZoneClick = useCallback(async (z: ZoneFeature) => {
     setSelected(z);
     setDLoading(true);
     setDetail(null);
     try {
-      const r = await fetch(api(`/api/v1/deforestation/${z.id}`), { headers: { Authorization: `Bearer ${token}` } });
+      const r = await fetch(api(`/api/v1/deforestation/${z.id}`));
       if (r.ok) setDetail(await r.json());
     } catch {} finally { setDLoading(false); }
   }, []);
 
   const close = () => { setSelected(null); setDetail(null); };
-
-  if (isLoading || !isAuthenticated) {
-    return <div className="flex h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" /></div>;
-  }
 
   const yearly = detail?.yearly || [];
   const ndviRange = yearly.length > 0 ? { min: Math.min(...yearly.map((p) => p.avg_ndvi)), max: Math.max(...yearly.map((p) => p.avg_ndvi)) } : { min: 0, max: 1 };

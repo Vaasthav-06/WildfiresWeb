@@ -55,7 +55,6 @@ from backend.routers.predict import router as predict_router
 from backend.routers.tile_route import router as tile_router
 from backend.routers.firms_route import router as firms_router
 from backend.routers.search import router as search_router
-from backend.routers.chat import router as chat_router
 from backend.routers.model_info import router as model_router
 from backend.routers.region_analysis import router as region_router
 from backend.routers.alerts import router as alerts_router
@@ -68,7 +67,6 @@ app.include_router(predict_router)
 app.include_router(tile_router)
 app.include_router(firms_router)
 app.include_router(search_router)
-app.include_router(chat_router)
 app.include_router(model_router)
 app.include_router(region_router)
 app.include_router(alerts_router)

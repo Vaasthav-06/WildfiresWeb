@@ -9,8 +9,8 @@ interface ZoneFeature { id: number; name: string; type: string; state?: string; 
 
 interface Props {
   onZonesLoaded: (zones: ZoneFeature[]) => void;
-  onZoneClick: (zone: ZoneFeature, token: string) => void;
-  onRectDraw: (swLat: number, swLng: number, neLat: number, neLng: number, token: string) => void;
+  onZoneClick: (zone: ZoneFeature) => void;
+  onRectDraw: (swLat: number, swLng: number, neLat: number, neLng: number) => void;
   drawMode: boolean;
   onDrawEnd: () => void;
 }
@@ -27,7 +27,6 @@ export default function DeforestationMap({ onZonesLoaded, onZoneClick, onRectDra
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-    const token = localStorage.getItem("wf_token") || "";
 
     const map = L.map(containerRef.current, {
       center: [23.5, 80], zoom: 6,
@@ -43,7 +42,7 @@ export default function DeforestationMap({ onZonesLoaded, onZoneClick, onRectDra
     L.control.attribution({ position: "bottomright", prefix: false }).addTo(map);
     mapRef.current = map;
 
-    fetch(api("/api/v1/deforestation/map-data"), { headers: { Authorization: `Bearer ${token}` } })
+    fetch(api("/api/v1/deforestation/map-data"))
       .then((r) => (r.ok ? r.json() : []))
       .then((zones: ZoneFeature[]) => {
         const distinct = zones.filter((z) => z.type === "reserve");
@@ -60,7 +59,7 @@ export default function DeforestationMap({ onZonesLoaded, onZoneClick, onRectDra
               </div>`,
               { direction: "top", sticky: true }
             );
-            layer.on("click", () => onZoneClick(z, token));
+            layer.on("click", () => onZoneClick(z));
             layer.addTo(map);
           } catch {}
         });
@@ -99,7 +98,7 @@ export default function DeforestationMap({ onZonesLoaded, onZoneClick, onRectDra
         rectRef.current = null;
         const sw = bounds.getSouthWest();
         const ne = bounds.getNorthEast();
-        onRectDraw(sw.lat, sw.lng, ne.lat, ne.lng, token);
+        onRectDraw(sw.lat, sw.lng, ne.lat, ne.lng);
       }
       drawStart.current = null;
       drawModeRef.current = false;
