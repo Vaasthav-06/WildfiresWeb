@@ -1,19 +1,23 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import dynamic from "next/dynamic";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { api } from "@/lib/constants";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, TrendingDown, TrendingUp, Minus, Trees, Calendar, Activity } from "lucide-react";
+import { X, TrendingDown, TrendingUp, Minus, Trees, Square, Activity, Crosshair } from "lucide-react";
 
 interface ZoneFeature { id: number; name: string; type: string; state?: string; geojson: string; ndvi_change: number; cover_change: number; trend: string; color: string }
-
 interface YearlyPoint { year: number; avg_ndvi: number; avg_cover: number; avg_disturbance: number }
-interface ZoneDetail { zone_name: string; zone_type: string; state: string; yearly: YearlyPoint[]; summary: { first_year: number; last_year: number; first_ndvi: number; last_ndvi: number; ndvi_change: number; cover_change_pct: number; trend: string } }
+interface ZoneDetail {
+  zone_name: string; zone_type: string; area_sq_deg?: number; intersected_zones?: number;
+  intersected_names?: string[]; yearly: YearlyPoint[];
+  summary: { first_year: number; last_year: number; first_ndvi: number; last_ndvi: number; ndvi_change: number; cover_change_pct: number; trend: string };
+}
+
+const CHART_COLORS: Record<string, string> = { declining: "#DC2626", stable: "#F59E0B", improving: "#16A34A" };
 
 function TrendBadge({ trend, change }: { trend: string; change: number }) {
   const cfg = trend === "declining" ? { icon: TrendingDown, color: "bg-red-50 text-red-700 border-red-200" }
@@ -22,7 +26,7 @@ function TrendBadge({ trend, change }: { trend: string; change: number }) {
   return (
     <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${cfg.color}`}>
       <cfg.icon className="h-3 w-3" />
-      {trend} {change !== 0 && <span className="tabular-nums">({change > 0 ? "+" : ""}{change.toFixed(1)}%)</span>}
+      {trend} ({change > 0 ? "+" : ""}{change.toFixed(1)}%)
     </span>
   );
 }
@@ -32,10 +36,13 @@ export default function DeforestationPage() {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
+  const rectRef = useRef<L.Rectangle | null>(null);
+  const drawStart = useRef<L.LatLng | null>(null);
   const [features, setFeatures] = useState<ZoneFeature[]>([]);
   const [selected, setSelected] = useState<ZoneFeature | null>(null);
   const [detail, setDetail] = useState<ZoneDetail | null>(null);
   const [dLoading, setDLoading] = useState(false);
+  const [drawMode, setDrawMode] = useState(false);
 
   useEffect(() => { if (!isLoading && !isAuthenticated) router.push("/login"); }, [isLoading, isAuthenticated, router]);
 
@@ -48,7 +55,7 @@ export default function DeforestationPage() {
       zoomControl: true, attributionControl: false,
     });
     L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-      attribution: "Esri, Maxar, Earthstar Geographics", maxZoom: 19,
+      attribution: "Esri, Maxar", maxZoom: 19,
     }).addTo(map);
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "OSM", maxZoom: 19, opacity: 0.35,
@@ -59,42 +66,90 @@ export default function DeforestationPage() {
     fetch(api("/api/v1/deforestation/map-data"), { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => (r.ok ? r.json() : []))
       .then((zones: ZoneFeature[]) => {
-        setFeatures(zones);
-        zones.forEach((z) => {
+        const distinct = zones.filter((z) => z.type === "reserve");
+        setFeatures(distinct);
+        distinct.forEach((z) => {
           try {
-            const geom = JSON.parse(z.geojson);
-            const layer = L.geoJSON(geom as never, {
-              style: { color: z.color, weight: 3, fillColor: z.color, fillOpacity: 0.15 },
+            const layer = L.geoJSON(JSON.parse(z.geojson) as never, {
+              style: { color: z.color, weight: 3, fillColor: z.color, fillOpacity: 0.18 },
             });
             layer.bindTooltip(
-              `<div style="font-family:Inter;font-size:12px;line-height:1.5;max-width:220px">
+              `<div style="font-family:Inter;font-size:12px;line-height:1.5">
                 <b style="color:#1E293B;font-size:13px">${z.name}</b><br/>
-                <span style="color:#64748B">${z.type.replace(/_/g, " ")} · ${z.state || ""}</span><br/>
-                <span style="color:${z.color};font-weight:600">${z.trend} (${z.ndvi_change > 0 ? "+" : ""}${(z.ndvi_change * 100).toFixed(1)}% NDVI)</span>
+                <span style="color:${z.color};font-weight:600">${z.trend} (${(z.ndvi_change*100).toFixed(1)}%)</span>
               </div>`,
-              { direction: "top", sticky: true, opacity: 0.95 }
+              { direction: "top", sticky: true }
             );
-            layer.on("click", () => {
-              setSelected(z);
-              setDetail(null);
-              setDLoading(true);
-              fetch(api(`/api/v1/deforestation/${z.id}`), { headers: { Authorization: `Bearer ${token}` } })
-                .then((r) => (r.ok ? r.json() : null))
-                .then((d) => { setDetail(d); setDLoading(false); })
-                .catch(() => setDLoading(false));
-            });
+            layer.on("click", () => loadZoneDetail(z, token));
             layer.addTo(map);
           } catch {}
         });
-        if (zones.length > 0) {
+        if (distinct.length > 0) {
           const allBounds = L.latLngBounds([] as never);
-          map.eachLayer((l) => { if (l instanceof L.GeoJSON) { try { allBounds.extend((l as L.GeoJSON).getBounds()); } catch {} } });
+          map.eachLayer((l) => { if (l instanceof L.GeoJSON) { try { allBounds.extend(l.getBounds()); } catch {} } });
           if (allBounds.isValid()) map.fitBounds(allBounds, { padding: [40, 40] });
         }
       });
 
+    map.on("mousedown", (e: L.LeafletMouseEvent) => {
+      if (!drawMode) return;
+      map.dragging.disable();
+      drawStart.current = e.latlng;
+    });
+    map.on("mousemove", (e: L.LeafletMouseEvent) => {
+      if (!drawMode || !drawStart.current) return;
+      if (rectRef.current) map.removeLayer(rectRef.current);
+      rectRef.current = L.rectangle(L.latLngBounds(drawStart.current, e.latlng), {
+        color: "#2563EB", weight: 2, fillColor: "#3B82F6", fillOpacity: 0.1, dashArray: "6 3",
+      }).addTo(map);
+    });
+    map.on("mouseup", (e: L.LeafletMouseEvent) => {
+      if (!drawMode || !drawStart.current) return;
+      map.dragging.enable();
+      const bounds = L.latLngBounds(drawStart.current, e.latlng);
+      if (bounds.isValid() && drawStart.current.distanceTo(e.latlng) > 10) {
+        analyzeRect(bounds, token);
+      }
+      if (rectRef.current) map.removeLayer(rectRef.current);
+      rectRef.current = null;
+      drawStart.current = null;
+      setDrawMode(false);
+    });
+
     return () => { map.remove(); mapRef.current = null; };
   }, [isAuthenticated]);
+
+  const loadZoneDetail = useCallback(async (z: ZoneFeature, token: string) => {
+    setSelected(z);
+    setDLoading(true);
+    setDetail(null);
+    try {
+      const r = await fetch(api(`/api/v1/deforestation/${z.id}`), { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) setDetail(await r.json());
+    } catch {} finally { setDLoading(false); }
+  }, []);
+
+  const analyzeRect = useCallback(async (bounds: L.LatLngBounds, token: string) => {
+    const sw = bounds.getSouthWest();
+    const ne = bounds.getNorthEast();
+    setSelected(null);
+    setDLoading(true);
+    setDetail(null);
+    try {
+      const r = await fetch(api("/api/v1/deforestation/analyze-area"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ lat1: sw.lat, lon1: sw.lng, lat2: ne.lat, lon2: ne.lng }),
+      });
+      if (r.ok) {
+        const d = await r.json();
+        setDetail(d);
+        setSelected({ id: 0, name: d.zone_name, type: d.zone_type, geojson: "", ndvi_change: d.summary.ndvi_change, cover_change: d.summary.cover_change_pct, trend: d.summary.trend, color: CHART_COLORS[d.summary.trend] || "#94A3B8" });
+      }
+    } catch {} finally { setDLoading(false); }
+  }, []);
+
+  const close = () => { setSelected(null); setDetail(null); };
 
   if (isLoading || !isAuthenticated) {
     return <div className="flex h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" /></div>;
@@ -102,16 +157,15 @@ export default function DeforestationPage() {
 
   const yearly = detail?.yearly || [];
   const ndviRange = yearly.length > 0 ? { min: Math.min(...yearly.map((p) => p.avg_ndvi)), max: Math.max(...yearly.map((p) => p.avg_ndvi)) } : { min: 0, max: 1 };
-  const cH = 160; const cW = 400;
+  const cH = 170; const cW = 380;
   const pad = { t: 8, r: 10, b: 24, l: 42 };
   const pW = cW - pad.l - pad.r; const pH = cH - pad.t - pad.b;
 
   return (
     <div className="relative h-[calc(100vh-64px)] w-full overflow-hidden">
-      {/* Map */}
       <div ref={containerRef} className="absolute inset-0 z-0" />
 
-      {/* Legend overlay */}
+      {/* Legend + Draw button */}
       <div className="absolute top-4 left-4 z-10 rounded-xl bg-white/90 backdrop-blur px-4 py-3 shadow-lg ring-1 ring-slate-200/80">
         <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">Vegetation Trend</p>
         {[{ label: "Declining", color: "#DC2626" }, { label: "Stable", color: "#F59E0B" }, { label: "Improving", color: "#16A34A" }].map((t) => (
@@ -120,52 +174,73 @@ export default function DeforestationPage() {
             <span className="text-[12px] text-slate-600">{t.label}</span>
           </div>
         ))}
-        <div className="mt-2 pt-2 border-t border-slate-100 text-[10px] text-slate-400">
-          {features.length} zones · Click for details
+        <div className="mt-2 pt-2 border-t border-slate-100 text-[10px] text-slate-400">{features.length} zones</div>
+      </div>
+
+      {/* Draw tool button */}
+      <div className="absolute top-4 right-4 z-10 flex gap-2">
+        <div className="rounded-xl bg-white/90 backdrop-blur px-4 py-2.5 shadow-lg ring-1 ring-slate-200/80 flex items-center gap-2">
+          <Trees className="h-4 w-4 text-emerald-600" />
+          <span className="text-[12px] font-bold text-slate-700">Deforestation Monitor</span>
+          <span className="w-px h-4 bg-slate-200 mx-1" />
+          <button
+            onClick={() => setDrawMode(!drawMode)}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1 text-[11px] font-bold transition-all ${
+              drawMode ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-blue-50"
+            }`}
+          >
+            <Square className="h-3.5 w-3.5" />
+            {drawMode ? "Drawing..." : "Draw Area"}
+          </button>
         </div>
       </div>
 
-      {/* Title */}
-      <div className="absolute top-4 right-4 z-10 rounded-xl bg-white/90 backdrop-blur px-4 py-2.5 shadow-lg ring-1 ring-slate-200/80">
-        <div className="flex items-center gap-2">
-          <Trees className="h-4 w-4 text-emerald-600" />
-          <span className="text-[12px] font-bold text-slate-700">Deforestation Monitor</span>
+      {/* Draw mode indicator */}
+      {drawMode && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-10 rounded-lg bg-blue-600 px-4 py-2 text-[13px] font-bold text-white shadow-lg animate-pulse">
+          <Crosshair className="inline h-4 w-4 mr-2 -mt-0.5" />
+          Click and drag to draw analysis rectangle
         </div>
-      </div>
+      )}
 
       {/* Detail panel */}
       <AnimatePresence>
         {selected && (
           <motion.div
-            initial={{ x: 420 }}
-            animate={{ x: 0 }}
-            exit={{ x: 420 }}
+            initial={{ x: 420 }} animate={{ x: 0 }} exit={{ x: 420 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
             className="absolute top-0 right-0 z-20 h-full w-[420px] overflow-y-auto bg-white shadow-2xl border-l border-slate-200"
           >
             <div className="sticky top-0 bg-white z-10 border-b border-slate-100 px-5 py-3 flex items-center justify-between">
-              <div>
-                <h2 className="text-[15px] font-bold text-slate-900">{selected.name}</h2>
-                <p className="text-[11px] text-slate-500">{selected.type.replace(/_/g, " ")} · {selected.state || ""}</p>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-[15px] font-bold text-slate-900 truncate">{selected.name}</h2>
+                <p className="text-[11px] text-slate-500">{selected.type.replace(/_/g, " ")} {detail?.intersected_zones ? `· ${detail.intersected_zones} zones` : `· ${selected.state || ""}`}</p>
               </div>
-              <button onClick={() => { setSelected(null); setDetail(null); }} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
+              <button onClick={close} className="text-slate-400 hover:text-slate-600 ml-3"><X className="h-5 w-5" /></button>
             </div>
 
             {dLoading && <div className="flex justify-center py-12"><div className="h-6 w-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" /></div>}
 
             {detail && (
               <div className="p-5 space-y-4">
+                {detail.intersected_names && detail.intersected_names.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {detail.intersected_names.map((n) => <span key={n} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">{n}</span>)}
+                  </div>
+                )}
+
                 <div className="flex items-center gap-3">
                   <TrendBadge trend={detail.summary.trend} change={detail.summary.ndvi_change * 100} />
+                  {detail.area_sq_deg && <span className="text-[10px] text-slate-400">{detail.area_sq_deg.toFixed(2)}deg²</span>}
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
                   <div className="rounded-lg bg-slate-50 p-3 text-center">
-                    <p className="text-[9px] uppercase tracking-wider text-slate-400">NDVI {detail.summary.first_year}</p>
+                    <p className="text-[9px] uppercase tracking-wider text-slate-400">{detail.summary.first_year}</p>
                     <p className="mt-1 text-[16px] font-bold tabular-nums text-slate-800">{detail.summary.first_ndvi.toFixed(3)}</p>
                   </div>
                   <div className="rounded-lg bg-slate-50 p-3 text-center">
-                    <p className="text-[9px] uppercase tracking-wider text-slate-400">NDVI {detail.summary.last_year}</p>
+                    <p className="text-[9px] uppercase tracking-wider text-slate-400">{detail.summary.last_year}</p>
                     <p className="mt-1 text-[16px] font-bold tabular-nums text-slate-800">{detail.summary.last_ndvi.toFixed(3)}</p>
                   </div>
                   <div className="rounded-lg bg-red-50 p-3 text-center">
@@ -175,10 +250,6 @@ export default function DeforestationPage() {
                 </div>
 
                 <div className="bg-[#F8FAFC] rounded-xl p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Calendar className="h-3.5 w-3.5 text-emerald-600" />
-                    <span className="text-[11px] font-bold text-slate-600">{detail.summary.first_year} – {detail.summary.last_year}</span>
-                  </div>
                   <svg viewBox={`0 0 ${cW} ${cH}`} width="100%" height={cH}>
                     {[0, 0.33, 0.66, 1].map((frac) => {
                       const val = ndviRange.min + (ndviRange.max - ndviRange.min) * frac;
@@ -189,21 +260,19 @@ export default function DeforestationPage() {
                       const x = pad.l + ((p.year - yearly[0].year) / (yearly.length - 1)) * pW;
                       return <text key={p.year} x={x} y={cH - 4} textAnchor="middle" fill="#94A3B8" fontSize={8}>{p.year}</text>;
                     })}
+                    <polygon fill="#FEE2E2" fillOpacity={0.3}
+                      points={yearly.map((p, i) => {
+                        const x = pad.l + (i / (yearly.length - 1)) * pW;
+                        const y = pad.t + pH * (1 - (p.avg_ndvi - ndviRange.min) / (ndviRange.max - ndviRange.min || 0.001));
+                        return `${x},${y}`;
+                      }).join(" ") + ` ${pad.l + pW},${pad.t + pH} ${pad.l},${pad.t + pH}`}
+                    />
                     <polyline fill="none" stroke="#16A34A" strokeWidth={2} strokeLinecap="round"
                       points={yearly.map((p, i) => {
                         const x = pad.l + (i / (yearly.length - 1)) * pW;
                         const y = pad.t + pH * (1 - (p.avg_ndvi - ndviRange.min) / (ndviRange.max - ndviRange.min || 0.001));
                         return `${x},${y}`;
                       }).join(" ")}
-                    />
-                    <polygon fill="#FEE2E2" fillOpacity={0.3}
-                      points={
-                        yearly.map((p, i) => {
-                          const x = pad.l + (i / (yearly.length - 1)) * pW;
-                          const y = pad.t + pH * (1 - (p.avg_ndvi - ndviRange.min) / (ndviRange.max - ndviRange.min || 0.001));
-                          return `${x},${y}`;
-                        }).join(" ") + ` ${pad.l + pW},${pad.t + pH} ${pad.l},${pad.t + pH}`
-                      }
                     />
                     {yearly.map((p, i) => {
                       const x = pad.l + (i / (yearly.length - 1)) * pW;
@@ -213,17 +282,17 @@ export default function DeforestationPage() {
                   </svg>
                 </div>
 
-                <div className="rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 p-3 ring-1 ring-emerald-100">
+                <div className="rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 p-3 ring-1 ring-blue-100">
                   <div className="flex items-center gap-2 mb-1">
-                    <Activity className="h-3.5 w-3.5 text-emerald-600" />
-                    <span className="text-[11px] font-bold text-emerald-700">Summary</span>
+                    <Activity className="h-3.5 w-3.5 text-blue-600" />
+                    <span className="text-[11px] font-bold text-blue-700">Analysis</span>
                   </div>
                   <p className="text-[12px] text-slate-600 leading-relaxed">
                     {detail.summary.trend === "declining"
-                      ? `Vegetation health has declined by ${Math.abs(detail.summary.ndvi_change * 100).toFixed(1)}% over ${detail.summary.last_year - detail.summary.first_year} years, indicating active deforestation or degradation. Forest cover reduced by ${Math.abs(detail.summary.cover_change_pct).toFixed(1)}%.`
+                      ? `Vegetation declined ${Math.abs(detail.summary.ndvi_change * 100).toFixed(1)}% over ${detail.summary.last_year - detail.summary.first_year} years. Cover loss: ${Math.abs(detail.summary.cover_change_pct).toFixed(1)}%.`
                       : detail.summary.trend === "improving"
-                        ? `NDVI improved by ${(detail.summary.ndvi_change * 100).toFixed(1)}%, suggesting reforestation or conservation success. Cover change: ${detail.summary.cover_change_pct > 0 ? "+" : ""}${detail.summary.cover_change_pct.toFixed(1)}%.`
-                        : `Vegetation health has remained relatively stable over the monitored period (±${Math.abs(detail.summary.ndvi_change * 100).toFixed(1)}% NDVI change).`
+                        ? `Improved by ${(detail.summary.ndvi_change * 100).toFixed(1)}% over ${detail.summary.last_year - detail.summary.first_year} years.`
+                        : `Relatively stable (±${Math.abs(detail.summary.ndvi_change * 100).toFixed(1)}% NDVI change).`
                     }
                   </p>
                 </div>
