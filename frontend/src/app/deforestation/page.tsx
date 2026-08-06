@@ -1,238 +1,237 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
-import dynamic from "next/dynamic";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { api } from "@/lib/constants";
-import { motion } from "framer-motion";
-import { Trees, Map, TrendingDown, TrendingUp, Minus, Activity, Calendar, Layers } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { X, TrendingDown, TrendingUp, Minus, Trees, Calendar, Activity } from "lucide-react";
+
+interface ZoneFeature { id: number; name: string; type: string; state?: string; geojson: string; ndvi_change: number; cover_change: number; trend: string; color: string }
 
 interface YearlyPoint { year: number; avg_ndvi: number; avg_cover: number; avg_disturbance: number }
-interface VegetationData {
-  zone_name: string; state: string;
-  yearly: YearlyPoint[];
-  summary: { first_year: number; last_year: number; first_ndvi: number; last_ndvi: number; ndvi_change: number; cover_change_pct: number; trend: string };
-}
-interface Zone { id: number; name: string; type: string; }
+interface ZoneDetail { zone_name: string; zone_type: string; state: string; yearly: YearlyPoint[]; summary: { first_year: number; last_year: number; first_ndvi: number; last_ndvi: number; ndvi_change: number; cover_change_pct: number; trend: string } }
 
-const ZoneMap = dynamic(() => import("@/components/map/NDVIMap"), {
-  ssr: false,
-  loading: () => <div className="flex h-full w-full items-center justify-center bg-slate-100"><div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" /></div>,
-});
+function TrendBadge({ trend, change }: { trend: string; change: number }) {
+  const cfg = trend === "declining" ? { icon: TrendingDown, color: "bg-red-50 text-red-700 border-red-200" }
+    : trend === "improving" ? { icon: TrendingUp, color: "bg-emerald-50 text-emerald-700 border-emerald-200" }
+    : { icon: Minus, color: "bg-amber-50 text-amber-700 border-amber-200" };
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${cfg.color}`}>
+      <cfg.icon className="h-3 w-3" />
+      {trend} {change !== 0 && <span className="tabular-nums">({change > 0 ? "+" : ""}{change.toFixed(1)}%)</span>}
+    </span>
+  );
+}
 
 export default function DeforestationPage() {
-  const { isAuthenticated, isLoading, getHeaders } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
-  const [zones, setZones] = useState<Zone[]>([]);
-  const [zoneId, setZoneId] = useState<number | null>(null);
-  const [data, setData] = useState<VegetationData | null>(null);
-  const [dl, setDl] = useState(false);
-  const [selectedYear, setSelectedYear] = useState<number>(2025);
-  const chartRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const [features, setFeatures] = useState<ZoneFeature[]>([]);
+  const [selected, setSelected] = useState<ZoneFeature | null>(null);
+  const [detail, setDetail] = useState<ZoneDetail | null>(null);
+  const [dLoading, setDLoading] = useState(false);
 
   useEffect(() => { if (!isLoading && !isAuthenticated) router.push("/login"); }, [isLoading, isAuthenticated, router]);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
-    fetch(api("/api/v1/deforestation/zones"), { headers: getHeaders() })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((z: Zone[]) => { setZones(z); if (z.length > 0) setZoneId(z[0].id); });
-  }, [isAuthenticated, getHeaders]);
+    if (!isAuthenticated || !containerRef.current || mapRef.current) return;
+    const token = localStorage.getItem("wf_token") || "";
 
-  useEffect(() => {
-    if (!zoneId) return;
-    setDl(true);
-    fetch(api(`/api/v1/deforestation/${zoneId}`), { headers: getHeaders() })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { setData(d); setDl(false); if (d) setSelectedYear(d.summary.last_year); });
-  }, [zoneId, getHeaders]);
+    const map = L.map(containerRef.current, {
+      center: [23.5, 80], zoom: 6,
+      zoomControl: true, attributionControl: false,
+    });
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+      attribution: "Esri, Maxar, Earthstar Geographics", maxZoom: 19,
+    }).addTo(map);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "OSM", maxZoom: 19, opacity: 0.35,
+    }).addTo(map);
+    L.control.attribution({ position: "bottomright", prefix: false }).addTo(map);
+    mapRef.current = map;
+
+    fetch(api("/api/v1/deforestation/map-data"), { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((zones: ZoneFeature[]) => {
+        setFeatures(zones);
+        zones.forEach((z) => {
+          try {
+            const geom = JSON.parse(z.geojson);
+            const layer = L.geoJSON(geom as never, {
+              style: { color: z.color, weight: 3, fillColor: z.color, fillOpacity: 0.15 },
+            });
+            layer.bindTooltip(
+              `<div style="font-family:Inter;font-size:12px;line-height:1.5;max-width:220px">
+                <b style="color:#1E293B;font-size:13px">${z.name}</b><br/>
+                <span style="color:#64748B">${z.type.replace(/_/g, " ")} · ${z.state || ""}</span><br/>
+                <span style="color:${z.color};font-weight:600">${z.trend} (${z.ndvi_change > 0 ? "+" : ""}${(z.ndvi_change * 100).toFixed(1)}% NDVI)</span>
+              </div>`,
+              { direction: "top", sticky: true, opacity: 0.95 }
+            );
+            layer.on("click", () => {
+              setSelected(z);
+              setDetail(null);
+              setDLoading(true);
+              fetch(api(`/api/v1/deforestation/${z.id}`), { headers: { Authorization: `Bearer ${token}` } })
+                .then((r) => (r.ok ? r.json() : null))
+                .then((d) => { setDetail(d); setDLoading(false); })
+                .catch(() => setDLoading(false));
+            });
+            layer.addTo(map);
+          } catch {}
+        });
+        if (zones.length > 0) {
+          const allBounds = L.latLngBounds([] as never);
+          map.eachLayer((l) => { if (l instanceof L.GeoJSON) { try { allBounds.extend((l as L.GeoJSON).getBounds()); } catch {} } });
+          if (allBounds.isValid()) map.fitBounds(allBounds, { padding: [40, 40] });
+        }
+      });
+
+    return () => { map.remove(); mapRef.current = null; };
+  }, [isAuthenticated]);
 
   if (isLoading || !isAuthenticated) {
-    return <div className="flex min-h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" /></div>;
+    return <div className="flex h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" /></div>;
   }
 
-  const yearly = data?.yearly || [];
-  const ndviRange = yearly.length > 0
-    ? { min: Math.min(...yearly.map((p) => p.avg_ndvi)), max: Math.max(...yearly.map((p) => p.avg_ndvi)) }
-    : { min: 0, max: 1 };
-  const rangePad = (ndviRange.max - ndviRange.min) * 0.15;
-  const chartH = 200; const chartW = 660;
-  const pad = { top: 10, right: 15, bottom: 28, left: 48 };
-  const plotW = chartW - pad.left - pad.right;
-  const plotH = chartH - pad.top - pad.bottom;
-
-  const getXY = (p: YearlyPoint, idx: number) => {
-    const x = pad.left + (idx / (yearly.length - 1)) * plotW;
-    const y = pad.top + plotH * (1 - (p.avg_ndvi - ndviRange.min + rangePad) / (ndviRange.max - ndviRange.min + 2 * rangePad));
-    return { x, y };
-  };
+  const yearly = detail?.yearly || [];
+  const ndviRange = yearly.length > 0 ? { min: Math.min(...yearly.map((p) => p.avg_ndvi)), max: Math.max(...yearly.map((p) => p.avg_ndvi)) } : { min: 0, max: 1 };
+  const cH = 160; const cW = 400;
+  const pad = { t: 8, r: 10, b: 24, l: 42 };
+  const pW = cW - pad.l - pad.r; const pH = cH - pad.t - pad.b;
 
   return (
-    <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-white">
-      {/* Sidebar */}
-      <aside className="w-[340px] shrink-0 overflow-y-auto bg-white border-r border-slate-200 p-5">
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-          <div className="flex items-center gap-2"><Trees className="h-5 w-5 text-emerald-600" /><h1 className="text-[18px] font-bold text-slate-900">Deforestation Monitor</h1></div>
-          <p className="mt-1.5 text-[13px] text-slate-500 leading-relaxed">Click a year on the chart to explore satellite imagery for that period. Compare vegetation health across decades.</p>
-        </motion.div>
+    <div className="relative h-[calc(100vh-64px)] w-full overflow-hidden">
+      {/* Map */}
+      <div ref={containerRef} className="absolute inset-0 z-0" />
 
-        <div className="mt-6">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-3">Select Zone</p>
-          {zones.map((z) => (
-            <button key={z.id} onClick={() => setZoneId(z.id)}
-              className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-all text-[13px] mb-1 ${zoneId === z.id ? "bg-emerald-600 text-white shadow-md shadow-emerald-200" : "text-slate-600 hover:bg-emerald-50"}`}>
-              <Map className="h-3.5 w-3.5 shrink-0" />
-              <span className="font-medium truncate flex-1">{z.name}</span>
-              <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${zoneId === z.id ? "bg-white/20 text-white" : "bg-slate-100 text-slate-400"}`}>{z.type.replace("_", " ")}</span>
-            </button>
-          ))}
+      {/* Legend overlay */}
+      <div className="absolute top-4 left-4 z-10 rounded-xl bg-white/90 backdrop-blur px-4 py-3 shadow-lg ring-1 ring-slate-200/80">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">Vegetation Trend</p>
+        {[{ label: "Declining", color: "#DC2626" }, { label: "Stable", color: "#F59E0B" }, { label: "Improving", color: "#16A34A" }].map((t) => (
+          <div key={t.label} className="flex items-center gap-2 mb-1">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ background: t.color }} />
+            <span className="text-[12px] text-slate-600">{t.label}</span>
+          </div>
+        ))}
+        <div className="mt-2 pt-2 border-t border-slate-100 text-[10px] text-slate-400">
+          {features.length} zones · Click for details
         </div>
+      </div>
 
-        {data && (
-          <>
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <div className="rounded-xl bg-red-50 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-red-500">NDVI Change</p>
-                <p className="mt-1 text-[20px] font-black tabular-nums text-red-600">{data.summary.ndvi_change < 0 ? data.summary.ndvi_change.toFixed(3) : "+" + data.summary.ndvi_change.toFixed(3)}</p>
-                <p className="text-[10px] text-red-400">{data.summary.first_year}→{data.summary.last_year}</p>
+      {/* Title */}
+      <div className="absolute top-4 right-4 z-10 rounded-xl bg-white/90 backdrop-blur px-4 py-2.5 shadow-lg ring-1 ring-slate-200/80">
+        <div className="flex items-center gap-2">
+          <Trees className="h-4 w-4 text-emerald-600" />
+          <span className="text-[12px] font-bold text-slate-700">Deforestation Monitor</span>
+        </div>
+      </div>
+
+      {/* Detail panel */}
+      <AnimatePresence>
+        {selected && (
+          <motion.div
+            initial={{ x: 420 }}
+            animate={{ x: 0 }}
+            exit={{ x: 420 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="absolute top-0 right-0 z-20 h-full w-[420px] overflow-y-auto bg-white shadow-2xl border-l border-slate-200"
+          >
+            <div className="sticky top-0 bg-white z-10 border-b border-slate-100 px-5 py-3 flex items-center justify-between">
+              <div>
+                <h2 className="text-[15px] font-bold text-slate-900">{selected.name}</h2>
+                <p className="text-[11px] text-slate-500">{selected.type.replace(/_/g, " ")} · {selected.state || ""}</p>
               </div>
-              <div className="rounded-xl bg-amber-50 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600">Cover Loss</p>
-                <p className="mt-1 text-[20px] font-black tabular-nums text-amber-700">{Math.abs(data.summary.cover_change_pct).toFixed(1)}%</p>
-                <p className="text-[10px] text-amber-500">forest cover</p>
-              </div>
+              <button onClick={() => { setSelected(null); setDetail(null); }} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
             </div>
 
-            <div className="mt-3 rounded-xl bg-slate-50 p-3">
-              <div className="flex items-center gap-2">
-                {data.summary.trend === "declining" ? <TrendingDown className="h-4 w-4 text-red-500" /> : data.summary.trend === "improving" ? <TrendingUp className="h-4 w-4 text-emerald-500" /> : <Minus className="h-4 w-4 text-amber-500" />}
-                <span className="text-[13px] font-bold text-slate-700 capitalize">{data.summary.trend}</span>
-              </div>
-              <p className="mt-1 text-[11px] text-slate-500">NDVI: {data.summary.first_ndvi.toFixed(3)} → {data.summary.last_ndvi.toFixed(3)}</p>
-            </div>
+            {dLoading && <div className="flex justify-center py-12"><div className="h-6 w-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" /></div>}
 
-            {selectedYear && data.yearly.find((p) => p.year === selectedYear) && (
-              <div className="mt-3 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 p-3 ring-1 ring-emerald-100">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 mb-1">Selected Year</p>
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-emerald-500" />
-                  <span className="text-[20px] font-black tabular-nums text-emerald-700">{selectedYear}</span>
+            {detail && (
+              <div className="p-5 space-y-4">
+                <div className="flex items-center gap-3">
+                  <TrendBadge trend={detail.summary.trend} change={detail.summary.ndvi_change * 100} />
                 </div>
-                {(() => {
-                  const pt = data.yearly.find((p) => p.year === selectedYear)!;
-                  const pct = data.yearly[0].avg_ndvi > 0 ? ((pt.avg_ndvi - data.yearly[0].avg_ndvi) / data.yearly[0].avg_ndvi) * 100 : 0;
-                  return (
-                    <div className="mt-1 grid grid-cols-2 gap-x-3 text-[11px]">
-                      <span className="text-slate-500">NDVI: <strong className="text-slate-700">{pt.avg_ndvi.toFixed(4)}</strong></span>
-                      <span className="text-slate-500">Change: <strong className={pct < 0 ? "text-red-600" : "text-emerald-600"}>{pct.toFixed(1)}%</strong></span>
-                      <span className="text-slate-500">Cover: <strong className="text-slate-700">{pt.avg_cover.toFixed(1)}%</strong></span>
-                      <span className="text-slate-500">Disturb: <strong className="text-slate-700">{pt.avg_disturbance.toFixed(1)}%</strong></span>
-                    </div>
-                  );
-                })()}
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-lg bg-slate-50 p-3 text-center">
+                    <p className="text-[9px] uppercase tracking-wider text-slate-400">NDVI {detail.summary.first_year}</p>
+                    <p className="mt-1 text-[16px] font-bold tabular-nums text-slate-800">{detail.summary.first_ndvi.toFixed(3)}</p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-3 text-center">
+                    <p className="text-[9px] uppercase tracking-wider text-slate-400">NDVI {detail.summary.last_year}</p>
+                    <p className="mt-1 text-[16px] font-bold tabular-nums text-slate-800">{detail.summary.last_ndvi.toFixed(3)}</p>
+                  </div>
+                  <div className="rounded-lg bg-red-50 p-3 text-center">
+                    <p className="text-[9px] uppercase tracking-wider text-red-500">Change</p>
+                    <p className="mt-1 text-[16px] font-bold tabular-nums text-red-600">{(detail.summary.ndvi_change * 100).toFixed(1)}%</p>
+                  </div>
+                </div>
+
+                <div className="bg-[#F8FAFC] rounded-xl p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Calendar className="h-3.5 w-3.5 text-emerald-600" />
+                    <span className="text-[11px] font-bold text-slate-600">{detail.summary.first_year} – {detail.summary.last_year}</span>
+                  </div>
+                  <svg viewBox={`0 0 ${cW} ${cH}`} width="100%" height={cH}>
+                    {[0, 0.33, 0.66, 1].map((frac) => {
+                      const val = ndviRange.min + (ndviRange.max - ndviRange.min) * frac;
+                      const y = pad.t + pH * (1 - frac);
+                      return <g key={frac}><line x1={pad.l} y1={y} x2={pad.l + pW} y2={y} stroke="#E2E8F0" strokeWidth={0.5} /><text x={pad.l - 4} y={y + 3} textAnchor="end" fill="#94A3B8" fontSize={8}>{val.toFixed(3)}</text></g>;
+                    })}
+                    {yearly.filter((_, i) => i % 4 === 0).map((p) => {
+                      const x = pad.l + ((p.year - yearly[0].year) / (yearly.length - 1)) * pW;
+                      return <text key={p.year} x={x} y={cH - 4} textAnchor="middle" fill="#94A3B8" fontSize={8}>{p.year}</text>;
+                    })}
+                    <polyline fill="none" stroke="#16A34A" strokeWidth={2} strokeLinecap="round"
+                      points={yearly.map((p, i) => {
+                        const x = pad.l + (i / (yearly.length - 1)) * pW;
+                        const y = pad.t + pH * (1 - (p.avg_ndvi - ndviRange.min) / (ndviRange.max - ndviRange.min || 0.001));
+                        return `${x},${y}`;
+                      }).join(" ")}
+                    />
+                    <polygon fill="#FEE2E2" fillOpacity={0.3}
+                      points={
+                        yearly.map((p, i) => {
+                          const x = pad.l + (i / (yearly.length - 1)) * pW;
+                          const y = pad.t + pH * (1 - (p.avg_ndvi - ndviRange.min) / (ndviRange.max - ndviRange.min || 0.001));
+                          return `${x},${y}`;
+                        }).join(" ") + ` ${pad.l + pW},${pad.t + pH} ${pad.l},${pad.t + pH}`
+                      }
+                    />
+                    {yearly.map((p, i) => {
+                      const x = pad.l + (i / (yearly.length - 1)) * pW;
+                      const y = pad.t + pH * (1 - (p.avg_ndvi - ndviRange.min) / (ndviRange.max - ndviRange.min || 0.001));
+                      return <circle key={p.year} cx={x} cy={y} r={2} fill="#16A34A" stroke="white" strokeWidth={1} />;
+                    })}
+                  </svg>
+                </div>
+
+                <div className="rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 p-3 ring-1 ring-emerald-100">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Activity className="h-3.5 w-3.5 text-emerald-600" />
+                    <span className="text-[11px] font-bold text-emerald-700">Summary</span>
+                  </div>
+                  <p className="text-[12px] text-slate-600 leading-relaxed">
+                    {detail.summary.trend === "declining"
+                      ? `Vegetation health has declined by ${Math.abs(detail.summary.ndvi_change * 100).toFixed(1)}% over ${detail.summary.last_year - detail.summary.first_year} years, indicating active deforestation or degradation. Forest cover reduced by ${Math.abs(detail.summary.cover_change_pct).toFixed(1)}%.`
+                      : detail.summary.trend === "improving"
+                        ? `NDVI improved by ${(detail.summary.ndvi_change * 100).toFixed(1)}%, suggesting reforestation or conservation success. Cover change: ${detail.summary.cover_change_pct > 0 ? "+" : ""}${detail.summary.cover_change_pct.toFixed(1)}%.`
+                        : `Vegetation health has remained relatively stable over the monitored period (±${Math.abs(detail.summary.ndvi_change * 100).toFixed(1)}% NDVI change).`
+                    }
+                  </p>
+                </div>
               </div>
             )}
-
-            <div className="mt-3 rounded-xl bg-slate-50 p-3">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Interpretation</p>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
-                <strong>NDVI</strong> (Normalized Difference Vegetation Index) ranges from -1 to 1. Higher values indicate healthier, denser vegetation. Declining NDVI over time suggests forest degradation or deforestation.
-              </p>
-            </div>
-          </>
+          </motion.div>
         )}
-      </aside>
-
-      {/* Main — Map + Chart */}
-      <main className="flex-1 flex flex-col bg-white">
-        {dl && <div className="flex flex-1 items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" /></div>}
-
-        {!dl && data && (
-          <>
-            {/* Satellite Map */}
-            <div className="h-[55%] relative border-b border-slate-200">
-              <ZoneMap year={selectedYear} zoneId={zoneId} side="left" onYearChange={() => {}} />
-              <div className="absolute top-3 right-3 z-10 flex items-center gap-2 rounded-lg bg-white/90 backdrop-blur px-3 py-1.5 shadow-lg ring-1 ring-slate-200">
-                <Layers className="h-3.5 w-3.5 text-emerald-600" />
-                <span className="text-[12px] font-bold text-slate-700">{selectedYear} Satellite</span>
-              </div>
-            </div>
-
-            {/* Chart */}
-            <div className="border-b border-slate-200 bg-[#F8FAFC] px-4 py-2 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Activity className="h-3.5 w-3.5 text-emerald-600" />
-                <span className="text-[12px] font-bold text-slate-700">{data.zone_name}</span>
-                <span className="text-[11px] text-slate-400">{data.summary.first_year}–{data.summary.last_year}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] text-slate-400">Click chart points to explore years</span>
-                <button onClick={() => setSelectedYear(data.summary.first_year)} className="text-[11px] font-medium text-slate-500 hover:text-emerald-600">Reset</button>
-                <button onClick={() => setSelectedYear(data.summary.last_year)} className="text-[11px] font-medium text-slate-500 hover:text-emerald-600">Latest</button>
-              </div>
-            </div>
-
-            <div className="flex-1 flex items-center justify-center overflow-auto p-4 bg-[#F8FAFC]">
-              <svg ref={chartRef} viewBox={`0 0 ${chartW} ${chartH}`} width={chartW} height={chartH} className="max-w-full cursor-pointer">
-                {[0, 0.25, 0.5, 0.75, 1].map((frac) => {
-                  const val = ndviRange.min + (ndviRange.max - ndviRange.min) * frac;
-                  const y = pad.top + plotH * (1 - (val - ndviRange.min + rangePad) / (ndviRange.max - ndviRange.min + 2 * rangePad));
-                  return (
-                    <g key={frac}>
-                      <line x1={pad.left} y1={y} x2={pad.left + plotW} y2={y} stroke="#E2E8F0" strokeWidth={0.5} />
-                      <text x={pad.left - 6} y={y + 4} textAnchor="end" fill="#94A3B8" fontSize={9}>{val.toFixed(3)}</text>
-                    </g>
-                  );
-                })}
-                {yearly.filter((_, i) => i % 3 === 0).map((p) => {
-                  const { x } = getXY(p, yearly.indexOf(p));
-                  return <text key={p.year} x={x} y={chartH - 5} textAnchor="middle" fill="#94A3B8" fontSize={10}>{p.year}</text>;
-                })}
-                <polyline fill="none" stroke="#16A34A" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"
-                  points={yearly.map((p, i) => { const { x, y } = getXY(p, i); return `${x},${y}`; }).join(" ")}
-                />
-                <polygon fill="#FEE2E2" fillOpacity={0.35}
-                  points={
-                    yearly.map((p, i) => { const { x, y } = getXY(p, i); return `${x},${y}`; }).join(" ") +
-                    ` ${pad.left + plotW},${pad.top + plotH} ${pad.left},${pad.top + plotH}`
-                  }
-                />
-                {yearly.map((p, i) => {
-                  const { x, y } = getXY(p, i);
-                  const isSelected = p.year === selectedYear;
-                  const pctChange = yearly[0].avg_ndvi > 0 ? ((p.avg_ndvi - yearly[0].avg_ndvi) / yearly[0].avg_ndvi) * 100 : 0;
-                  return (
-                    <g key={p.year} onClick={() => setSelectedYear(p.year)} style={{ cursor: "pointer" }}>
-                      {isSelected && <circle cx={x} cy={y} r={14} fill="none" stroke="#16A34A" strokeWidth={2} opacity={0.3} />}
-                      <circle cx={x} cy={y} r={isSelected ? 5 : 3} fill={isSelected ? "#059669" : "#16A34A"} stroke="white" strokeWidth={isSelected ? 2 : 1.5} />
-                      {isSelected && (
-                        <>
-                          <text x={x} y={y - 16} textAnchor="middle" fill="#059669" fontSize={11} fontWeight="bold">{p.avg_ndvi.toFixed(4)}</text>
-                          <text x={x} y={y + 20} textAnchor="middle" fill={pctChange < 0 ? "#DC2626" : "#059669"} fontSize={10} fontWeight="bold">{pctChange > 0 ? "+" : ""}{pctChange.toFixed(1)}%</text>
-                        </>
-                      )}
-                      {!isSelected && i % 4 === 0 && (
-                        <text x={x} y={y - 10} textAnchor="middle" fill="#16A34A" fontSize={9}>{p.avg_ndvi.toFixed(3)}</text>
-                      )}
-                    </g>
-                  );
-                })}
-                {/* Selected year vertical line */}
-                {yearly.find((p) => p.year === selectedYear) && (() => {
-                  const pt = yearly.find((p) => p.year === selectedYear)!;
-                  const { x, y } = getXY(pt, yearly.indexOf(pt));
-                  return <line x1={x} y1={y} x2={x} y2={pad.top + plotH} stroke="#16A34A" strokeWidth={1} strokeDasharray="4 3" opacity={0.4} />;
-                })()}
-              </svg>
-            </div>
-          </>
-        )}
-
-        {!dl && !data && zoneId && (
-          <div className="flex flex-1 items-center justify-center bg-[#F8FAFC] text-slate-400">No vegetation data available for this zone yet.</div>
-        )}
-      </main>
+      </AnimatePresence>
     </div>
   );
 }
