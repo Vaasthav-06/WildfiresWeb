@@ -69,7 +69,7 @@ def init_schema():
                     district VARCHAR(100),
                     area_ha REAL,
                     metadata JSONB DEFAULT '{}'::jsonb,
-                    geom GEOMETRY(MultiPolygon, 4326),
+                    geom GEOMETRY(Geometry, 4326),
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 );
             """)

@@ -1,5 +1,8 @@
 import sys
 import os
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
 
 _file = os.path.abspath(__file__)
 _backend_dir = os.path.dirname(_file)
@@ -23,16 +26,9 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     from backend.routers.heatmap import start_heatmap_worker
     from backend.services.firms import start_firms_worker
-    import threading
+    from backend.services.database import get_pool
 
-    def _init_db():
-        try:
-            from backend.services.database import get_pool
-            get_pool()
-        except Exception as e:
-            logger.warning(f"Database init skipped: {e}")
-
-    threading.Thread(target=_init_db, daemon=True).start()
+    get_pool()
 
     start_heatmap_worker()
     if os.environ.get("FIRMS_API_KEY"):
