@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { api } from "@/lib/constants";
 import { motion } from "framer-motion";
-import {
-  Trees, ChevronLeft, ChevronRight, Map, Activity, Calendar,
-} from "lucide-react";
+import { Trees, Map, Activity, Calendar } from "lucide-react";
 
 const NDVI_MAP_YEARS = [2005, 2007, 2009, 2011, 2013, 2015, 2017, 2019, 2021, 2023, 2025];
 
@@ -16,96 +14,11 @@ interface Zone {
   id: number; name: string; type: string; state?: string;
 }
 
-// ── Separate client component for Leaflet map ──────────────────────────────────
-function NDVIMapInner({
-  year, zoneId, side,
-  onYearChange,
-}: {
-  year: number; zoneId: number | null; side: "left" | "right";
-  onYearChange: (d: number) => void;
-}) {
-  const container = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<import("leaflet").Map | null>(null);
-  const ndviRef = useRef<import("leaflet").TileLayer | null>(null);
-  const geoRef = useRef<import("leaflet").GeoJSON | null>(null);
-  const initRef = useRef(false);
-  const [L, setL] = useState<typeof import("leaflet") | null>(null);
+const NDVIMap = dynamic(() => import("@/components/map/NDVIMap"), {
+  ssr: false,
+  loading: () => <div className="flex h-full w-full items-center justify-center bg-slate-800"><div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" /></div>,
+});
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const leaflet = await import("leaflet");
-      await import("leaflet/dist/leaflet.css");
-      if (!cancelled) setL(leaflet.default || leaflet);
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  useEffect(() => {
-    if (!L || !container.current || initRef.current) return;
-    initRef.current = true;
-
-    const map = L.map(container.current, {
-      center: [23.5, 80], zoom: 6,
-      zoomControl: true, attributionControl: false,
-      scrollWheelZoom: true,
-    });
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "OSM", maxZoom: 19,
-    }).addTo(map);
-    L.control.attribution({ position: "bottomright", prefix: false }).addTo(map);
-    mapRef.current = map;
-
-    return () => { map.remove(); mapRef.current = null; initRef.current = false; };
-  }, [L]);
-
-  useEffect(() => {
-    if (!L || !mapRef.current) return;
-    if (ndviRef.current) mapRef.current.removeLayer(ndviRef.current);
-    const date = `${year}-07-01`;
-    ndviRef.current = L.tileLayer(
-      `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_NDVI_16Day/default/${date}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
-      { attribution: "NASA GIBS MODIS NDVI", opacity: 0.7, maxZoom: 12 }
-    ).addTo(mapRef.current);
-  }, [year, L]);
-
-  useEffect(() => {
-    if (!L || !mapRef.current || !zoneId) return;
-    if (geoRef.current) mapRef.current.removeLayer(geoRef.current);
-    const token = localStorage.getItem("wf_token") || "";
-    fetch(api(`/api/v1/admin/zones/${zoneId}/geojson`), {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((geom) => {
-        if (!geom || !mapRef.current) return;
-        geoRef.current = L.geoJSON(geom as never, {
-          style: { color: "#F97316", weight: 3, fillColor: "#F97316", fillOpacity: 0.10, dashArray: "6 3" },
-        }).addTo(mapRef.current!);
-        mapRef.current!.fitBounds(geoRef.current.getBounds(), { padding: [30, 30] });
-      });
-  }, [zoneId, L]);
-
-  return (
-    <div className="relative flex-1">
-      <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
-        <button onClick={() => onYearChange(-2)} className="flex h-7 w-7 items-center justify-center rounded-lg bg-white shadow ring-1 ring-slate-200 hover:bg-slate-50">
-          <ChevronLeft className="h-3.5 w-3.5 text-slate-600" />
-        </button>
-        <span className="rounded-lg bg-white px-3 py-1 text-[13px] font-bold tabular-nums text-slate-700 shadow ring-1 ring-slate-200">{year}</span>
-        <button onClick={() => onYearChange(2)} disabled={year >= 2025} className="flex h-7 w-7 items-center justify-center rounded-lg bg-white shadow ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-30">
-          <ChevronRight className="h-3.5 w-3.5 text-slate-600" />
-        </button>
-      </div>
-      <div className="absolute top-3 right-3 z-10 rounded-lg bg-white/80 px-2 py-0.5 text-[10px] font-bold text-slate-400 shadow ring-1 ring-slate-200 backdrop-blur">
-        {side === "left" ? "BASELINE" : "COMPARISON"}
-      </div>
-      <div ref={container} className="h-full w-full" />
-    </div>
-  );
-}
-
-// ── Main page ──────────────────────────────────────────────────────────────────
 export default function DeforestationPage() {
   const { isAuthenticated, isLoading, getHeaders } = useAuth();
   const router = useRouter();
@@ -124,11 +37,11 @@ export default function DeforestationPage() {
     fetch(api("/api/v1/admin/zones"), { headers: getHeaders() })
       .then((r) => (r.ok ? r.json() : []))
       .then((z: Zone[]) => {
-        setZones(z.filter((x) => x.type === "reserve"));
-        if (z.length > 0) {
-          const first = z.find((x) => x.type === "reserve") || z[0];
-          setZoneId(first.id);
-          setZoneName(first.name);
+        const reserves = z.filter((x: Zone) => x.type === "reserve");
+        setZones(reserves);
+        if (reserves.length > 0) {
+          setZoneId(reserves[0].id);
+          setZoneName(reserves[0].name);
         }
       });
   }, [isAuthenticated, getHeaders]);
@@ -139,7 +52,6 @@ export default function DeforestationPage() {
 
   return (
     <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-[#0F172A]">
-      {/* Sidebar */}
       <aside className="w-[360px] shrink-0 overflow-y-auto bg-white border-r border-slate-200 p-5">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex items-center gap-2">
@@ -215,7 +127,6 @@ export default function DeforestationPage() {
         </div>
       </aside>
 
-      {/* Dual Map */}
       <main className="flex-1 flex flex-col">
         <div className="flex items-center justify-between px-5 py-3 bg-slate-800/50 border-b border-slate-700">
           <div className="flex items-center gap-4">
@@ -231,10 +142,10 @@ export default function DeforestationPage() {
 
         <div className="flex-1 flex">
           <div className="w-1/2 border-r border-slate-700">
-            <NDVIMapInner year={leftYear} zoneId={zoneId} side="left" onYearChange={(d) => setLeftYear((y) => Math.max(2005, Math.min(2025, y + d)))} />
+            <NDVIMap year={leftYear} zoneId={zoneId} side="left" onYearChange={(d) => setLeftYear((y) => Math.max(2005, Math.min(2025, y + d)))} />
           </div>
           <div className="w-1/2">
-            <NDVIMapInner year={rightYear} zoneId={zoneId} side="right" onYearChange={(d) => setRightYear((y) => Math.max(2005, Math.min(2025, y + d)))} />
+            <NDVIMap year={rightYear} zoneId={zoneId} side="right" onYearChange={(d) => setRightYear((y) => Math.max(2005, Math.min(2025, y + d)))} />
           </div>
         </div>
 
