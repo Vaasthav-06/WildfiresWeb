@@ -43,6 +43,17 @@ export default function DeforestationPage() {
   const [detail, setDetail] = useState<ZoneDetail | null>(null);
   const [dLoading, setDLoading] = useState(false);
   const [drawMode, setDrawMode] = useState(false);
+  const drawModeRef = useRef(false);
+
+  const toggleDraw = useCallback(() => {
+    setDrawMode((prev) => {
+      drawModeRef.current = !prev;
+      if (!prev) {
+        setSelected(null); setDetail(null);
+      }
+      return !prev;
+    });
+  }, []);
 
   useEffect(() => { if (!isLoading && !isAuthenticated) router.push("/login"); }, [isLoading, isAuthenticated, router]);
 
@@ -92,19 +103,22 @@ export default function DeforestationPage() {
       });
 
     map.on("mousedown", (e: L.LeafletMouseEvent) => {
-      if (!drawMode) return;
-      map.dragging.disable();
+      if (!drawModeRef.current) return;
+      L.DomEvent.preventDefault(e.originalEvent as Event);
       drawStart.current = e.latlng;
+      map.dragging.disable();
     });
     map.on("mousemove", (e: L.LeafletMouseEvent) => {
-      if (!drawMode || !drawStart.current) return;
+      if (!drawModeRef.current || !drawStart.current) return;
+      L.DomEvent.preventDefault(e.originalEvent as Event);
       if (rectRef.current) map.removeLayer(rectRef.current);
       rectRef.current = L.rectangle(L.latLngBounds(drawStart.current, e.latlng), {
         color: "#2563EB", weight: 2, fillColor: "#3B82F6", fillOpacity: 0.1, dashArray: "6 3",
       }).addTo(map);
     });
     map.on("mouseup", (e: L.LeafletMouseEvent) => {
-      if (!drawMode || !drawStart.current) return;
+      if (!drawModeRef.current || !drawStart.current) return;
+      L.DomEvent.preventDefault(e.originalEvent as Event);
       map.dragging.enable();
       const bounds = L.latLngBounds(drawStart.current, e.latlng);
       if (bounds.isValid() && drawStart.current.distanceTo(e.latlng) > 10) {
@@ -113,6 +127,7 @@ export default function DeforestationPage() {
       if (rectRef.current) map.removeLayer(rectRef.current);
       rectRef.current = null;
       drawStart.current = null;
+      drawModeRef.current = false;
       setDrawMode(false);
     });
 
@@ -184,7 +199,7 @@ export default function DeforestationPage() {
           <span className="text-[12px] font-bold text-slate-700">Deforestation Monitor</span>
           <span className="w-px h-4 bg-slate-200 mx-1" />
           <button
-            onClick={() => setDrawMode(!drawMode)}
+            onClick={toggleDraw}
             className={`flex items-center gap-1.5 rounded-lg px-3 py-1 text-[11px] font-bold transition-all ${
               drawMode ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-blue-50"
             }`}
