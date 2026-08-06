@@ -1,5 +1,7 @@
 """Returns all zones with vegetation data + their trends for the interactive deforestation map."""
 
+import json
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from backend.services.database import query
@@ -8,6 +10,48 @@ from backend.middleware.auth_middleware import get_current_user
 router = APIRouter(prefix="/api/v1/deforestation", tags=["deforestation"])
 
 TREND_COLORS = {"declining": "#DC2626", "stable": "#F59E0B", "improving": "#16A34A"}
+
+_INDIA_GEOM = None
+_GEOJSON_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "india.geojson"
+
+
+def _load_india():
+    global _INDIA_GEOM
+    if _INDIA_GEOM is not None:
+        return _INDIA_GEOM
+    if not _GEOJSON_PATH.exists():
+        return None
+    from shapely.geometry import shape
+    with open(_GEOJSON_PATH) as f:
+        gj = json.load(f)
+    polys = []
+    for feat in gj.get("features", []):
+        try:
+            polys.append(shape(feat["geometry"]))
+        except Exception:
+            pass
+    _INDIA_GEOM = polys if polys else None
+    return _INDIA_GEOM
+
+
+def _is_land(lat: float, lon: float) -> bool:
+    polys = _load_india()
+    if polys is None:
+        return True
+    from shapely.geometry import Point
+    pt = Point(lon, lat)
+    return any(p.contains(pt) or p.touches(pt) for p in polys)
+
+
+def _rect_on_land(lat1: float, lon1: float, lat2: float, lon2: float) -> bool:
+    lat_min, lat_max = sorted([lat1, lat2])
+    lon_min, lon_max = sorted([lon1, lon2])
+    samples = [
+        (lat_min, lon_min), (lat_min, lon_max),
+        (lat_max, lon_min), (lat_max, lon_max),
+        ((lat_min + lat_max) / 2, (lon_min + lon_max) / 2),
+    ]
+    return any(_is_land(lat, lon) for lat, lon in samples)
 
 
 class AnalyzeAreaRequest(BaseModel):
@@ -21,6 +65,22 @@ class AnalyzeAreaRequest(BaseModel):
 def analyze_area(body: AnalyzeAreaRequest, user: dict = Depends(get_current_user)):
     lat_min, lat_max = sorted([body.lat1, body.lat2])
     lon_min, lon_max = sorted([body.lon1, body.lon2])
+
+    if not _rect_on_land(body.lat1, body.lon1, body.lat2, body.lon2):
+        return {
+            "zone_name": "Sea / Ocean",
+            "zone_type": "sea",
+            "area_sq_deg": round(abs(lat_max - lat_min) * abs(lon_max - lon_min), 3),
+            "intersected_zones": 0,
+            "yearly": [],
+            "sea_body": True,
+            "summary": {
+                "first_year": 0, "last_year": 0,
+                "first_ndvi": 0, "last_ndvi": 0,
+                "ndvi_change": 0, "cover_change_pct": 0,
+                "trend": "sea",
+            },
+        }
 
     intersected = query(
         """SELECT z.id, z.name, z.type,
