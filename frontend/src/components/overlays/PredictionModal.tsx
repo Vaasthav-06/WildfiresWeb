@@ -3,9 +3,10 @@
 import { useMemo } from "react";
 import { useAppStore } from "@/stores/appStore";
 import { useHeatmap } from "@/hooks/useHeatmap";
+import { usePrediction } from "@/hooks/usePrediction";
 import { PANEL, RISK_COLORS } from "@/lib/constants";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, MapPin, Activity } from "lucide-react";
+import { X, Thermometer, Droplets, Wind, MapPin, Activity } from "lucide-react";
 
 function riskTier(risk: number): keyof typeof RISK_COLORS {
   if (risk < 20) return "low";
@@ -38,12 +39,16 @@ export default function PredictionModal() {
   const setSelectedPoint = useAppStore((s) => s.setSelectedPoint);
   const predictionMode = useAppStore((s) => s.predictionMode);
   const { data: heatmap } = useHeatmap();
+  const { data: weather } = usePrediction(selectedPoint?.lat ?? null, selectedPoint?.lon ?? null);
   const open = predictionMode && selectedPoint !== null;
 
   const nearest = useMemo(() => {
     if (!selectedPoint || !heatmap?.points?.length) return null;
     return findNearest(selectedPoint.lat, selectedPoint.lon, heatmap.points);
   }, [selectedPoint, heatmap]);
+
+  const risk = nearest?.risk ?? 0;
+  const tier = riskTier(risk);
 
   return (
     <AnimatePresence>
@@ -78,42 +83,50 @@ export default function PredictionModal() {
                   </span>
                 </div>
 
+                {/* Weather */}
+                {weather && (
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="rounded-lg bg-slate-50 p-3 text-center">
+                      <Thermometer className="mx-auto mb-1 h-3.5 w-3.5 text-orange-500" />
+                      <div className="text-[13px] font-semibold text-slate-800">{weather.temperature}°C</div>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 p-3 text-center">
+                      <Droplets className="mx-auto mb-1 h-3.5 w-3.5 text-blue-500" />
+                      <div className="text-[13px] font-semibold text-slate-800">{weather.humidity}%</div>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 p-3 text-center">
+                      <Wind className="mx-auto mb-1 h-3.5 w-3.5 text-cyan-500" />
+                      <div className="text-[13px] font-semibold text-slate-800">{weather.wind} m/s</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Risk — from heatmap, matches overlay */}
                 <div className="rounded-lg bg-slate-50 p-4">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-[13px] text-slate-500">Fire Risk</span>
-                    <span className="text-[13px] font-semibold text-slate-700">{riskLabel(nearest.risk)}</span>
+                    <span className="text-[13px] font-semibold text-slate-700">{riskLabel(risk)}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="h-2 flex-1 rounded-full bg-slate-200">
                       <div
                         className="h-2 rounded-full transition-all"
                         style={{
-                          width: `${Math.min(100, nearest.risk)}%`,
-                          backgroundColor: RISK_COLORS[riskTier(nearest.risk)],
+                          width: `${Math.min(100, risk)}%`,
+                          backgroundColor: RISK_COLORS[tier],
                         }}
                       />
                     </div>
-                    <span className="text-[13px] font-bold tabular-nums" style={{ color: RISK_COLORS[riskTier(nearest.risk)] }}>
-                      {nearest.risk.toFixed(1)}%
+                    <span className="text-[13px] font-bold tabular-nums" style={{ color: RISK_COLORS[tier] }}>
+                      {risk.toFixed(1)}%
                     </span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400">
-                  <div className="rounded-lg bg-slate-50 p-2 text-center">
-                    <span className="block text-[10px] uppercase tracking-wider">Grid Point</span>
-                    <span className="font-mono text-slate-600">{nearest.lat.toFixed(2)}°, {nearest.lon.toFixed(2)}°</span>
-                  </div>
-                  <div className="rounded-lg bg-slate-50 p-2 text-center">
-                    <span className="block text-[10px] uppercase tracking-wider">Resolution</span>
-                    <span className="text-slate-600">0.5° grid</span>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 rounded-lg bg-blue-50 p-3">
                   <Activity className="h-3.5 w-3.5 text-blue-600" />
                   <span className="text-[12px] text-blue-700">
-                    Risk label: <strong>{riskLabel(nearest.risk)}</strong> — matches heatmap overlay color
+                    <strong>{riskLabel(risk)}</strong> — matches heatmap overlay
                   </span>
                 </div>
               </div>
