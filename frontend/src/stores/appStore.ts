@@ -41,7 +41,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   heatmapVisible: true,
   setHeatmapVisible: (v) => set({ heatmapVisible: v }),
-  firmsVisible: false,
+  firmsVisible: true,
   setFirmsVisible: (v) => set({ firmsVisible: v }),
 
   selectedPoint: null,
