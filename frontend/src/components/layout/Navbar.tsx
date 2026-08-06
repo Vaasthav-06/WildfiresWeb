@@ -5,10 +5,12 @@ import { usePathname } from "next/navigation";
 
 const links = [
   { href: "/", label: "Dashboard" },
-  { href: "/gis", label: "GIS Portal" },
-  { href: "/deforestation", label: "Deforestation" },
   { href: "/geo-fencing", label: "Geo-Fencing" },
   { href: "/region-analysis", label: "Region Analysis" },
+  { href: "/gis", label: "GIS Portal" },
+  { href: "/deforestation", label: "Deforestation" },
+  { href: "/model-explanation", label: "Model Metrics" },
+  { href: "/research", label: "Research" },
 ];
 
 export default function Navbar() {
