@@ -37,6 +37,7 @@ export default function DeforestationPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const rectRef = useRef<L.Rectangle | null>(null);
+  const persistentRect = useRef<L.Rectangle | null>(null);
   const drawStart = useRef<L.LatLng | null>(null);
   const [features, setFeatures] = useState<ZoneFeature[]>([]);
   const [selected, setSelected] = useState<ZoneFeature | null>(null);
@@ -122,10 +123,14 @@ export default function DeforestationPage() {
       map.dragging.enable();
       const bounds = L.latLngBounds(drawStart.current, e.latlng);
       if (bounds.isValid() && drawStart.current.distanceTo(e.latlng) > 10) {
+        if (persistentRect.current) map.removeLayer(persistentRect.current);
+        if (rectRef.current) map.removeLayer(rectRef.current);
+        persistentRect.current = L.rectangle(bounds, {
+          color: "#2563EB", weight: 2, fillColor: "#3B82F6", fillOpacity: 0.08, dashArray: "4 2",
+        }).addTo(map);
+        rectRef.current = null;
         analyzeRect(bounds, token);
       }
-      if (rectRef.current) map.removeLayer(rectRef.current);
-      rectRef.current = null;
       drawStart.current = null;
       drawModeRef.current = false;
       setDrawMode(false);
@@ -207,6 +212,18 @@ export default function DeforestationPage() {
             <Square className="h-3.5 w-3.5" />
             {drawMode ? "Drawing..." : "Draw Area"}
           </button>
+          {persistentRect.current && (
+            <button
+              onClick={() => {
+                if (persistentRect.current && mapRef.current) mapRef.current.removeLayer(persistentRect.current);
+                persistentRect.current = null;
+                setSelected(null); setDetail(null);
+              }}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1 text-[11px] font-bold bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all"
+            >
+              Clear
+            </button>
+          )}
         </div>
       </div>
 
