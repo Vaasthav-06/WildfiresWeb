@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+import dynamic from "next/dynamic";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { api } from "@/lib/constants";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, TrendingDown, TrendingUp, Minus, Trees, Square, Activity, Crosshair } from "lucide-react";
+
+const DeforestationMapInner = dynamic(() => import("@/components/map/DeforestationMap"), { ssr: false });
 
 interface ZoneFeature { id: number; name: string; type: string; state?: string; geojson: string; ndvi_change: number; cover_change: number; trend: string; color: string }
 interface YearlyPoint { year: number; avg_ndvi: number; avg_cover: number; avg_disturbance: number }
@@ -34,124 +35,24 @@ function TrendBadge({ trend, change }: { trend: string; change: number }) {
 export default function DeforestationPage() {
   const { isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const rectRef = useRef<L.Rectangle | null>(null);
-  const persistentRect = useRef<L.Rectangle | null>(null);
-  const drawStart = useRef<L.LatLng | null>(null);
   const [features, setFeatures] = useState<ZoneFeature[]>([]);
   const [selected, setSelected] = useState<ZoneFeature | null>(null);
   const [detail, setDetail] = useState<ZoneDetail | null>(null);
   const [dLoading, setDLoading] = useState(false);
   const [drawMode, setDrawMode] = useState(false);
-  const drawModeRef = useRef(false);
+  const [hasRect, setHasRect] = useState(false);
 
   const toggleDraw = useCallback(() => {
     setDrawMode((prev) => {
-      drawModeRef.current = !prev;
-      if (!prev) {
-        setSelected(null); setDetail(null);
-      }
+      if (!prev) { setSelected(null); setDetail(null); }
       return !prev;
     });
   }, []);
 
   useEffect(() => { if (!isLoading && !isAuthenticated) router.push("/login"); }, [isLoading, isAuthenticated, router]);
 
-  useEffect(() => {
-    if (!isAuthenticated || !containerRef.current || mapRef.current) return;
-    const token = localStorage.getItem("wf_token") || "";
-
-    const map = L.map(containerRef.current, {
-      center: [23.5, 80], zoom: 6,
-      zoomControl: true, attributionControl: false,
-    });
-    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-      attribution: "Esri, Maxar", maxZoom: 19,
-    }).addTo(map);
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "OSM", maxZoom: 19, opacity: 0.35,
-    }).addTo(map);
-    L.control.attribution({ position: "bottomright", prefix: false }).addTo(map);
-    mapRef.current = map;
-
-    fetch(api("/api/v1/deforestation/map-data"), { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((zones: ZoneFeature[]) => {
-        const distinct = zones.filter((z) => z.type === "reserve");
-        setFeatures(distinct);
-        distinct.forEach((z) => {
-          try {
-            const layer = L.geoJSON(JSON.parse(z.geojson) as never, {
-              style: { color: z.color, weight: 3, fillColor: z.color, fillOpacity: 0.18 },
-            });
-            layer.bindTooltip(
-              `<div style="font-family:Inter;font-size:12px;line-height:1.5">
-                <b style="color:#1E293B;font-size:13px">${z.name}</b><br/>
-                <span style="color:${z.color};font-weight:600">${z.trend} (${(z.ndvi_change*100).toFixed(1)}%)</span>
-              </div>`,
-              { direction: "top", sticky: true }
-            );
-            layer.on("click", () => loadZoneDetail(z, token));
-            layer.addTo(map);
-          } catch {}
-        });
-        if (distinct.length > 0) {
-          const allBounds = L.latLngBounds([] as never);
-          map.eachLayer((l) => { if (l instanceof L.GeoJSON) { try { allBounds.extend(l.getBounds()); } catch {} } });
-          if (allBounds.isValid()) map.fitBounds(allBounds, { padding: [40, 40] });
-        }
-      });
-
-    map.on("mousedown", (e: L.LeafletMouseEvent) => {
-      if (!drawModeRef.current) return;
-      L.DomEvent.preventDefault(e.originalEvent as Event);
-      drawStart.current = e.latlng;
-      map.dragging.disable();
-    });
-    map.on("mousemove", (e: L.LeafletMouseEvent) => {
-      if (!drawModeRef.current || !drawStart.current) return;
-      L.DomEvent.preventDefault(e.originalEvent as Event);
-      if (rectRef.current) map.removeLayer(rectRef.current);
-      rectRef.current = L.rectangle(L.latLngBounds(drawStart.current, e.latlng), {
-        color: "#2563EB", weight: 2, fillColor: "#3B82F6", fillOpacity: 0.1, dashArray: "6 3",
-      }).addTo(map);
-    });
-    map.on("mouseup", (e: L.LeafletMouseEvent) => {
-      if (!drawModeRef.current || !drawStart.current) return;
-      L.DomEvent.preventDefault(e.originalEvent as Event);
-      map.dragging.enable();
-      const bounds = L.latLngBounds(drawStart.current, e.latlng);
-      if (bounds.isValid() && drawStart.current.distanceTo(e.latlng) > 10) {
-        if (persistentRect.current) map.removeLayer(persistentRect.current);
-        if (rectRef.current) map.removeLayer(rectRef.current);
-        persistentRect.current = L.rectangle(bounds, {
-          color: "#2563EB", weight: 2, fillColor: "#3B82F6", fillOpacity: 0.08, dashArray: "4 2",
-        }).addTo(map);
-        rectRef.current = null;
-        analyzeRect(bounds, token);
-      }
-      drawStart.current = null;
-      drawModeRef.current = false;
-      setDrawMode(false);
-    });
-
-    return () => { map.remove(); mapRef.current = null; };
-  }, [isAuthenticated]);
-
-  const loadZoneDetail = useCallback(async (z: ZoneFeature, token: string) => {
-    setSelected(z);
-    setDLoading(true);
-    setDetail(null);
-    try {
-      const r = await fetch(api(`/api/v1/deforestation/${z.id}`), { headers: { Authorization: `Bearer ${token}` } });
-      if (r.ok) setDetail(await r.json());
-    } catch {} finally { setDLoading(false); }
-  }, []);
-
-  const analyzeRect = useCallback(async (bounds: L.LatLngBounds, token: string) => {
-    const sw = bounds.getSouthWest();
-    const ne = bounds.getNorthEast();
+  const onRectDraw = useCallback(async (swLat: number, swLng: number, neLat: number, neLng: number, token: string) => {
+    setHasRect(true);
     setSelected(null);
     setDLoading(true);
     setDetail(null);
@@ -159,13 +60,23 @@ export default function DeforestationPage() {
       const r = await fetch(api("/api/v1/deforestation/analyze-area"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ lat1: sw.lat, lon1: sw.lng, lat2: ne.lat, lon2: ne.lng }),
+        body: JSON.stringify({ lat1: swLat, lon1: swLng, lat2: neLat, lon2: neLng }),
       });
       if (r.ok) {
         const d = await r.json();
         setDetail(d);
         setSelected({ id: 0, name: d.zone_name, type: d.zone_type, geojson: "", ndvi_change: d.summary.ndvi_change, cover_change: d.summary.cover_change_pct, trend: d.summary.trend, color: CHART_COLORS[d.summary.trend] || "#94A3B8" });
       }
+    } catch {} finally { setDLoading(false); }
+  }, []);
+
+  const onZoneClick = useCallback(async (z: ZoneFeature, token: string) => {
+    setSelected(z);
+    setDLoading(true);
+    setDetail(null);
+    try {
+      const r = await fetch(api(`/api/v1/deforestation/${z.id}`), { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) setDetail(await r.json());
     } catch {} finally { setDLoading(false); }
   }, []);
 
@@ -183,7 +94,13 @@ export default function DeforestationPage() {
 
   return (
     <div className="relative h-[calc(100vh-64px)] w-full overflow-hidden">
-      <div ref={containerRef} className="absolute inset-0 z-0" />
+      <DeforestationMapInner
+        onZonesLoaded={setFeatures}
+        onZoneClick={onZoneClick}
+        onRectDraw={onRectDraw}
+        drawMode={drawMode}
+        onDrawEnd={() => setDrawMode(false)}
+      />
 
       {/* Legend + Draw button */}
       <div className="absolute top-4 left-4 z-10 rounded-xl bg-white/90 backdrop-blur px-4 py-3 shadow-lg ring-1 ring-slate-200/80">
@@ -212,13 +129,9 @@ export default function DeforestationPage() {
             <Square className="h-3.5 w-3.5" />
             {drawMode ? "Drawing..." : "Draw Area"}
           </button>
-          {persistentRect.current && (
+          {hasRect && (
             <button
-              onClick={() => {
-                if (persistentRect.current && mapRef.current) mapRef.current.removeLayer(persistentRect.current);
-                persistentRect.current = null;
-                setSelected(null); setDetail(null);
-              }}
+              onClick={() => { setHasRect(false); setSelected(null); setDetail(null); }}
               className="flex items-center gap-1.5 rounded-lg px-3 py-1 text-[11px] font-bold bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all"
             >
               Clear
