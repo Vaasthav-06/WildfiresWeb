@@ -104,6 +104,22 @@ def init_schema():
             cur.execute("CREATE INDEX IF NOT EXISTS idx_alerts_date ON alerts_history(detected_at);")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_alerts_geom ON alerts_history USING GIST(geom);")
 
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS vegetation_history (
+                    id SERIAL PRIMARY KEY,
+                    zone_id INTEGER REFERENCES zones(id) ON DELETE CASCADE,
+                    year INTEGER NOT NULL,
+                    month INTEGER NOT NULL,
+                    ndvi REAL NOT NULL,
+                    vegetation_cover_pct REAL DEFAULT 0,
+                    disturbance_pct REAL DEFAULT 0,
+                    notes TEXT,
+                    UNIQUE(zone_id, year, month)
+                );
+            """)
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_veg_zone ON vegetation_history(zone_id);")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_veg_year ON vegetation_history(year);")
+
             conn.commit()
             logger.info("Database schema initialized")
     except Exception as e:
