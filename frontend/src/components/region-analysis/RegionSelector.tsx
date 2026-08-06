@@ -1,9 +1,7 @@
 "use client";
 
-import { motion } from "framer-motion";
-import type { Region } from "@/lib/regions";
 import { REGIONS } from "@/lib/regions";
-import { Trees, MapPin } from "lucide-react";
+import { Trees } from "lucide-react";
 
 interface Props {
   active: string;
