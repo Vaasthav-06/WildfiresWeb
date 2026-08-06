@@ -48,6 +48,7 @@ export default function GeoFenceMap({ selectedAlert }: Props) {
     fetch("/forestReserves.geojson")
       .then((r) => r.json())
       .then((data) => {
+        if (!mapRef.current) return;
         const layer = L.geoJSON(data as never, {
           style: () => ({
             color: "#16A34A",
@@ -63,9 +64,9 @@ export default function GeoFenceMap({ selectedAlert }: Props) {
             }
           },
         });
-        layer.addTo(map);
+        layer.addTo(mapRef.current);
         geoLayer.current = layer;
-        map.fitBounds(layer.getBounds(), { padding: [50, 50] });
+        mapRef.current.fitBounds(layer.getBounds(), { padding: [50, 50] });
       });
 
     mapRef.current = map;
