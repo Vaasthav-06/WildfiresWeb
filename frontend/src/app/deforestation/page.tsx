@@ -38,6 +38,7 @@ export default function DeforestationPage() {
   const [dLoading, setDLoading] = useState(false);
   const [drawMode, setDrawMode] = useState(false);
   const [hasRect, setHasRect] = useState(false);
+  const [chartExpanded, setChartExpanded] = useState(false);
 
   const toggleDraw = useCallback(() => setDrawMode((prev) => { if (!prev) { setSelected(null); setDetail(null); } return !prev; }), []);
   const close = () => { setSelected(null); setDetail(null); };
@@ -62,8 +63,14 @@ export default function DeforestationPage() {
   const W = 760; const H = 340; const padT = 40; const padR = 25; const padB = 50; const padL = 68;
   const pw = W - padL - padR; const ph = H - padT - padB;
 
+  // Expanded chart dimensions
+  const eW = 1100; const eH = 520; const epadT = 50; const epadR = 40; const epadB = 60; const epadL = 80;
+  const epw = eW - epadL - epadR; const eph = eH - epadT - epadB;
+
   const toX = (i: number) => padL + (i / Math.max(1, yearly.length - 1)) * pw;
   const toY = (v: number) => padT + ph * (1 - (v - ndviMin) / ndviSpread);
+  const etoX = (i: number) => epadL + (i / Math.max(1, yearly.length - 1)) * epw;
+  const etoY = (v: number) => epadT + eph * (1 - (v - ndviMin) / ndviSpread);
 
   return (
     <div className="relative h-[calc(100vh-64px)] w-full overflow-hidden">
@@ -145,10 +152,11 @@ export default function DeforestationPage() {
                 </div>
 
                 {/* CHART */}
-                <div className="rounded-2xl bg-gradient-to-b from-white to-[#F8FAFC] p-1 ring-1 ring-slate-200/60 overflow-hidden">
+                <div className="rounded-2xl bg-gradient-to-b from-white to-[#F8FAFC] p-1 ring-1 ring-slate-200/60 overflow-hidden cursor-pointer hover:ring-2 hover:ring-emerald-300 transition-all" onClick={() => setChartExpanded(true)}>
                   <div className="flex items-center gap-2 px-5 pt-5 pb-3">
                     <Calendar className="h-4 w-4 text-emerald-600" />
                     <span className="text-[13px] font-semibold text-slate-700">NDVI Time Series · {detail.summary.first_year} – {detail.summary.last_year}</span>
+                    <span className="ml-auto text-[11px] text-slate-400">Click to expand</span>
                   </div>
                   <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} className="block">
                     <defs>
@@ -193,6 +201,55 @@ export default function DeforestationPage() {
                 </div>
               </div>
             )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Expanded chart overlay */}
+      <AnimatePresence>
+        {chartExpanded && detail && yearly.length > 0 && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="absolute inset-0 z-30 flex items-center justify-center bg-white/95 backdrop-blur-md"
+            onClick={() => setChartExpanded(false)}>
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} transition={{ duration: 0.25 }}
+              className="w-[95%] max-w-[1200px] rounded-3xl bg-white p-8 shadow-2xl ring-1 ring-slate-200/60"
+              onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-[22px] font-bold text-slate-900">{detail.zone_name}</h2>
+                  <p className="text-[14px] text-slate-500 mt-1">NDVI Time Series · {detail.summary.first_year} – {detail.summary.last_year} · {detail.summary.trend} ({(detail.summary.ndvi_change * 100).toFixed(1)}%)</p>
+                </div>
+                <button onClick={() => setChartExpanded(false)} className="rounded-xl p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100"><X className="h-6 w-6" /></button>
+              </div>
+              <svg viewBox={`0 0 ${eW} ${eH}`} width="100%" height={eH} className="block">
+                <defs>
+                  <linearGradient id="bndviGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#16A34A" stopOpacity="0.30"/>
+                    <stop offset="100%" stopColor="#16A34A" stopOpacity="0.03"/>
+                  </linearGradient>
+                </defs>
+                {[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1].map((frac: number) => {
+                  const val = ndviMin + ndviSpread * frac;
+                  const y = etoY(val);
+                  return <g key={frac}><line x1={epadL} y1={y} x2={epadL + epw} y2={y} stroke="#CBD5E1" strokeWidth={1} strokeDasharray="4 4" /><text x={epadL - 14} y={y + 5} textAnchor="end" fill="#475569" fontSize={14} fontWeight={600} fontFamily="system-ui">{val.toFixed(3)}</text></g>;
+                })}
+                {yearly.filter((_: YearlyPoint, i: number) => i % 2 === 0).map((p: YearlyPoint) => { const x = etoX(yearly.indexOf(p)); return <text key={p.year} x={x} y={eH - 14} textAnchor="middle" fill="#475569" fontSize={14} fontWeight={600} fontFamily="system-ui">{p.year}</text>; })}
+                <path d={`M${etoX(0)},${eH - epadB} ` + yearly.map((p: YearlyPoint, i: number) => `L${etoX(i)},${etoY(p.avg_ndvi)}`).join(" ") + ` L${etoX(yearly.length - 1)},${eH - epadB} Z`} fill="url(#bndviGrad)" stroke="none" />
+                <path d={yearly.map((p: YearlyPoint, i: number) => `${i === 0 ? "M" : "L"}${etoX(i)},${etoY(p.avg_ndvi)}`).join(" ")} fill="none" stroke="#16A34A" strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" />
+                {yearly.map((p: YearlyPoint, i: number) => {
+                  const x = etoX(i); const y = etoY(p.avg_ndvi);
+                  const pct = yearly[0].avg_ndvi ? ((p.avg_ndvi - yearly[0].avg_ndvi) / yearly[0].avg_ndvi) * 100 : 0;
+                  const showLabel = i % 2 === 0;
+                  return <g key={p.year}>
+                    <circle cx={x} cy={y} r={showLabel ? 6 : 3.5} fill="white" stroke="#16A34A" strokeWidth={3} />
+                    {showLabel && <>
+                      <text x={x} y={y - 18} textAnchor="middle" fill="#065F46" fontSize={14} fontWeight={700}>{p.avg_ndvi.toFixed(4)}</text>
+                      <text x={x} y={y + 22} textAnchor="middle" fill={pct < 0 ? "#DC2626" : "#059669"} fontSize={12} fontWeight={700}>{pct > 0 ? "+" : ""}{pct.toFixed(1)}%</text>
+                    </>}
+                  </g>;
+                })}
+              </svg>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
