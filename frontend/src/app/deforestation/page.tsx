@@ -59,7 +59,7 @@ export default function DeforestationPage() {
   const ndviMax = yearly.length ? Math.max(...yearly.map((p: YearlyPoint) => p.avg_ndvi)) : 1;
   const ndviSpread = (ndviMax - ndviMin) || 0.01;
 
-  const W = 760; const H = 320; const padT = 35; const padR = 25; const padB = 45; const padL = 60;
+  const W = 760; const H = 340; const padT = 40; const padR = 25; const padB = 50; const padL = 68;
   const pw = W - padL - padR; const ph = H - padT - padB;
 
   const toX = (i: number) => padL + (i / Math.max(1, yearly.length - 1)) * pw;
@@ -153,28 +153,27 @@ export default function DeforestationPage() {
                   <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} className="block">
                     <defs>
                       <linearGradient id="ndviGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#16A34A" stopOpacity="0.25"/>
-                        <stop offset="100%" stopColor="#16A34A" stopOpacity="0.02"/>
+                        <stop offset="0%" stopColor="#16A34A" stopOpacity="0.30"/>
+                        <stop offset="100%" stopColor="#16A34A" stopOpacity="0.03"/>
                       </linearGradient>
                     </defs>
                     {[0, 0.2, 0.4, 0.6, 0.8, 1].map((frac: number) => {
                       const val = ndviMin + ndviSpread * frac;
                       const y = toY(val);
-                      return <g key={frac}><line x1={padL} y1={y} x2={padL + pw} y2={y} stroke="#E2E8F0" strokeWidth={1} strokeDasharray="4 3" /><text x={padL - 10} y={y + 4} textAnchor="end" fill="#94A3B8" fontSize={11} fontFamily="system-ui">{val.toFixed(3)}</text></g>;
+                      return <g key={frac}><line x1={padL} y1={y} x2={padL + pw} y2={y} stroke="#CBD5E1" strokeWidth={1} strokeDasharray="4 3" /><text x={padL - 12} y={y + 5} textAnchor="end" fill="#475569" fontSize={13} fontWeight={600} fontFamily="system-ui">{val.toFixed(3)}</text></g>;
                     })}
-                    {yearly.filter((_: YearlyPoint, i: number) => i % 4 === 0).map((p: YearlyPoint) => { const x = toX(yearly.indexOf(p)); return <text key={p.year} x={x} y={H - 10} textAnchor="middle" fill="#94A3B8" fontSize={11} fontFamily="system-ui">{p.year}</text>; })}
+                    {yearly.filter((_: YearlyPoint, i: number) => i % 4 === 0).map((p: YearlyPoint) => { const x = toX(yearly.indexOf(p)); return <text key={p.year} x={x} y={H - 12} textAnchor="middle" fill="#475569" fontSize={13} fontWeight={600} fontFamily="system-ui">{p.year}</text>; })}
                     <path d={`M${toX(0)},${H - padB} ` + yearly.map((p: YearlyPoint, i: number) => `L${toX(i)},${toY(p.avg_ndvi)}`).join(" ") + ` L${toX(yearly.length - 1)},${H - padB} Z`} fill="url(#ndviGrad)" stroke="none" />
-                    <path d={yearly.map((p: YearlyPoint, i: number) => `${i === 0 ? "M" : "L"}${toX(i)},${toY(p.avg_ndvi)}`).join(" ")} fill="none" stroke="#16A34A" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+                    <path d={yearly.map((p: YearlyPoint, i: number) => `${i === 0 ? "M" : "L"}${toX(i)},${toY(p.avg_ndvi)}`).join(" ")} fill="none" stroke="#16A34A" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" />
                     {yearly.map((p: YearlyPoint, i: number) => {
                       const x = toX(i); const y = toY(p.avg_ndvi);
                       const pct = yearly[0].avg_ndvi ? ((p.avg_ndvi - yearly[0].avg_ndvi) / yearly[0].avg_ndvi) * 100 : 0;
-                      const showLabel = i % 4 === 0;
-                      const dim = yearly[yearly.length - 1].avg_ndvi < yearly[0].avg_ndvi;
+                      const showLabel = i % 3 === 0;
                       return <g key={p.year}>
                         <circle cx={x} cy={y} r={showLabel ? 5 : 3} fill="white" stroke="#16A34A" strokeWidth={2.5} />
                         {showLabel && <>
-                          <text x={x} y={y - 14} textAnchor="middle" fill="#166534" fontSize={11} fontWeight={700}>{p.avg_ndvi.toFixed(4)}</text>
-                          <text x={x} y={y + 18} textAnchor="middle" fill={pct < 0 ? "#DC2626" : "#059669"} fontSize={10} fontWeight={600}>{pct > 0 ? "+" : ""}{pct.toFixed(1)}%</text>
+                          <text x={x} y={y - 16} textAnchor="middle" fill="#065F46" fontSize={12} fontWeight={700}>{p.avg_ndvi.toFixed(4)}</text>
+                          <text x={x} y={y + 20} textAnchor="middle" fill={pct < 0 ? "#DC2626" : "#059669"} fontSize={11} fontWeight={700}>{pct > 0 ? "+" : ""}{pct.toFixed(1)}%</text>
                         </>}
                       </g>;
                     })}
