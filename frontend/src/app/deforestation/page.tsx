@@ -76,8 +76,8 @@ export default function DeforestationPage() {
     <div className="relative h-[calc(100vh-64px)] w-full overflow-hidden">
       <DeforestationMapInner onZonesLoaded={setFeatures} onZoneClick={onZoneClick} onRectDraw={onRectDraw} drawMode={drawMode} onDrawEnd={() => setDrawMode(false)} />
 
-      {/* Legend */}
-      <div className="absolute top-5 left-5 z-10 rounded-2xl bg-white/95 backdrop-blur-xl px-5 py-4 shadow-xl shadow-slate-200/50 ring-1 ring-slate-200/70">
+      {/* Legend — bottom-left to avoid zoom toggle overlap */}
+      <div className="absolute bottom-5 left-5 z-10 rounded-2xl bg-white/95 backdrop-blur-xl px-5 py-4 shadow-xl shadow-slate-200/50 ring-1 ring-slate-200/70">
         <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400 mb-3">Vegetation Health</p>
         {[{ label: "Declining", color: "#DC2626" }, { label: "Stable", color: "#F59E0B" }, { label: "Improving", color: "#16A34A" }].map((t) => (
           <div key={t.label} className="flex items-center gap-3 mb-1.5">
