@@ -32,7 +32,7 @@ interface AppState {
   setFlyTo: (p: { lat: number; lon: number; zoom: number } | null) => void;
 }
 
-export const useAppStore = create<AppState>((set, get) => ({
+export const useAppStore = create<AppState>((set) => ({
   viewState: { latitude: 22.5, longitude: 78.5, zoom: 5.8 },
   setViewState: (p) => set((s) => ({ viewState: { ...s.viewState, ...p } })),
 
@@ -41,7 +41,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   heatmapVisible: true,
   setHeatmapVisible: (v) => set({ heatmapVisible: v }),
-  firmsVisible: false,
+  firmsVisible: true,
   setFirmsVisible: (v) => set({ firmsVisible: v }),
 
   selectedPoint: null,

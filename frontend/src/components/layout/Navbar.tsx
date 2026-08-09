@@ -8,6 +8,8 @@ const links = [
   { href: "/geo-fencing", label: "Geo-Fencing" },
   { href: "/gis-portal", label: "GIS Portal" },
   { href: "/region-analysis", label: "Region Analysis" },
+  { href: "/gis", label: "GIS Portal" },
+  { href: "/deforestation", label: "Deforestation" },
   { href: "/model-explanation", label: "Model Metrics" },
   { href: "/research", label: "Research" },
 ];

@@ -15,9 +15,8 @@ def _check_db():
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database not available")
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login")
 def login(req: LoginRequest):
-    _check_db()
     user = authenticate_user(req.email, req.password)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
@@ -30,8 +29,8 @@ def login(req: LoginRequest):
         refresh_token=refresh_token,
         user=UserOut(
             id=user["id"], email=user["email"], role=user["role"],
-            full_name=user.get("full_name"), is_active=True,
-            created_at=user.get("created_at"), last_login=user.get("last_login"),
+            full_name=user.get("full_name"), is_active=user["is_active"],
+            created_at=user["created_at"], last_login=user.get("last_login"),
         ),
     )
 

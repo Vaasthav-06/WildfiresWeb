@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useAppStore } from "@/stores/appStore";
@@ -25,6 +25,8 @@ const LAYER_LABELS: Record<LayerKey, string> = {
 export default function RegionMap({ regionId, center, bounds }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
+  const rectRef = useRef<L.Rectangle | null>(null);
+  const markerRef = useRef<L.CircleMarker | null>(null);
   const initialized = useRef(false);
 
   // Layer refs
@@ -50,10 +52,8 @@ export default function RegionMap({ regionId, center, bounds }: Props) {
     initialized.current = true;
 
     const map = L.map(container.current, {
-      center,
-      zoom: 12,
-      zoomControl: true,
-      attributionControl: false,
+      center, zoom: 12,
+      zoomControl: true, attributionControl: false,
       scrollWheelZoom: true,
     });
 
@@ -63,20 +63,14 @@ export default function RegionMap({ regionId, center, bounds }: Props) {
     ).addTo(map);
 
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "© OpenStreetMap",
-      maxZoom: 19,
-      opacity: 0.35,
+      attribution: "OSM", maxZoom: 19, opacity: 0.35,
     }).addTo(map);
 
     L.control.attribution({ position: "bottomright", prefix: false }).addTo(map);
     map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
 
     markerRef.current = L.circleMarker(center, {
-      radius: 10,
-      color: "#F97316",
-      fillColor: "#F97316",
-      fillOpacity: 0.35,
-      weight: 3,
+      radius: 8, color: "#F97316", fillColor: "#F97316", fillOpacity: 0.35, weight: 3,
     }).addTo(map);
 
     const triggerPrediction = (
@@ -147,27 +141,6 @@ export default function RegionMap({ regionId, center, bounds }: Props) {
           setNoFeatureWarning(false);
         }
 
-        const layer = L.geoJSON(
-          { type: "FeatureCollection", features: filtered } as any,
-          {
-            style: () => ({
-              color: "#16A34A",
-              weight: 3,
-              fillColor: "#22C55E",
-              fillOpacity: 0.15,
-              dashArray: "6 3",
-            }),
-            // interactive:false → boundary is visual-only; clicks pass through
-            // to the base map.on("click") handler so we get clean coordinates.
-            interactive: false,
-          }
-        );
-
-        if (visibleLayers.boundary) layer.addTo(mapRef.current!);
-        boundaryLayer.current = layer;
-      })
-      .catch((err) => console.error("[RegionMap] Failed to load boundary GeoJSON:", err));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [regionId]);
 
   // --- Load geo-fence zones ---

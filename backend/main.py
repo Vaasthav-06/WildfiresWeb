@@ -1,5 +1,8 @@
 import sys
 import os
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
 
 _file = os.path.abspath(__file__)
 _backend_dir = os.path.dirname(_file)
@@ -23,16 +26,9 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     from backend.routers.heatmap import start_heatmap_worker
     from backend.services.firms import start_firms_worker
-    import threading
+    from backend.services.database import get_pool
 
-    def _init_db():
-        try:
-            from backend.services.database import get_pool
-            get_pool()
-        except Exception as e:
-            logger.warning(f"Database init skipped: {e}")
-
-    threading.Thread(target=_init_db, daemon=True).start()
+    get_pool()
 
     start_heatmap_worker()
     if os.environ.get("FIRMS_API_KEY"):
@@ -59,24 +55,24 @@ from backend.routers.predict import router as predict_router
 from backend.routers.tile_route import router as tile_router
 from backend.routers.firms_route import router as firms_router
 from backend.routers.search import router as search_router
-from backend.routers.chat import router as chat_router
 from backend.routers.model_info import router as model_router
 from backend.routers.region_analysis import router as region_router
 from backend.routers.alerts import router as alerts_router
 from backend.routers.auth import router as auth_router
 from backend.routers.admin import router as admin_router
+from backend.routers.deforestation import router as deforestation_router
 
 app.include_router(heatmap_router)
 app.include_router(predict_router)
 app.include_router(tile_router)
 app.include_router(firms_router)
 app.include_router(search_router)
-app.include_router(chat_router)
 app.include_router(model_router)
 app.include_router(region_router)
 app.include_router(alerts_router)
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(deforestation_router)
 
 
 @app.get("/health")

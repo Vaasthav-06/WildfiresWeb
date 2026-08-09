@@ -59,7 +59,11 @@ def _generate_synthetic_heatmap(resolution: float = 0.5) -> list[dict]:
 
     points = []
     lat = 6.5
-    month = datetime.now().month
+    now = datetime.now()
+    month = now.month
+    day_of_year = now.timetuple().tm_yday
+    minute_of_day = now.hour * 60 + now.minute
+    time_seed = math.sin(2 * math.pi * minute_of_day / 1440)
 
     while lat <= 38.0:
         lon = 67.0
@@ -68,7 +72,9 @@ def _generate_synthetic_heatmap(resolution: float = 0.5) -> list[dict]:
                 lat_factor = 1.0 - abs(lat - 22.0) / 20.0
                 lon_factor = 1.0 - abs(lon - 80.0) / 15.0
                 seasonal = 0.5 + 0.5 * math.sin(2 * math.pi * (month - 3) / 12)
-                risk = max(0, min(100, lat_factor * lon_factor * seasonal * 100 * (0.8 + 0.4 * math.sin(lat * lon * 0.01))))
+                time_var = 0.2 * math.sin(time_seed + lat * 2.0) * math.cos(time_seed + lon * 1.5)
+                base = lat_factor * lon_factor * seasonal * 100
+                risk = max(0, min(100, base * (0.85 + time_var) * (0.9 + 0.2 * math.sin(lat * lon * 0.01))))
 
                 if risk > 1:
                     points.append({"lat": round(lat, 4), "lon": round(lon, 4), "risk": round(risk, 2)})
@@ -106,7 +112,7 @@ def _refresh_cache():
 def _background_worker():
     _refresh_cache()
     while True:
-        time.sleep(900)
+        time.sleep(300)
         _refresh_cache()
 
 

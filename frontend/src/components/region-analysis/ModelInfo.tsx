@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Cpu, BarChart4, Zap } from "lucide-react";
+import { Cpu, Zap } from "lucide-react";
 import type { RegionAnalysisResponse } from "@/lib/regionTypes";
 
 export default function ModelInfo({ model }: { model: RegionAnalysisResponse["model"] }) {

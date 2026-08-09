@@ -7,7 +7,6 @@ import Legend from "@/components/panels/Legend";
 import LayerControls from "@/components/panels/LayerControls";
 import ForestFilter from "@/components/panels/ForestFilter";
 import PredictionModal from "@/components/overlays/PredictionModal";
-import Chatbot from "@/components/overlays/Chatbot";
 import TopRisksPanel from "@/components/panels/TopRisksPanel";
 
 const MapView = dynamic(() => import("@/components/map/MapView"), {
@@ -32,7 +31,6 @@ export default function Home() {
       <LayerControls />
       <Legend />
       <PredictionModal />
-      <Chatbot />
     </main>
   );
 }

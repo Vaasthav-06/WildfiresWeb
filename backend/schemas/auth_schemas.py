@@ -61,3 +61,6 @@ class ZoneOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+TokenResponse.update_forward_refs()

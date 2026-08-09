@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Clock, CloudSun, Cpu } from "lucide-react";
+import { CloudSun, Cpu } from "lucide-react";
 
 interface Props {
   lastUpdated: string;

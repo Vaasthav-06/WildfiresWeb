@@ -50,7 +50,7 @@ def decode_token(token: str) -> dict | None:
 
 def authenticate_user(email: str, password: str) -> dict | None:
     rows = query(
-        "SELECT id, email, role, full_name, password_hash, is_active FROM users WHERE email = %s",
+        "SELECT id, email, role, full_name, password_hash, is_active, created_at, last_login FROM users WHERE email = %s",
         (email.lower().strip(),),
     )
     if not rows:
@@ -72,6 +72,9 @@ def authenticate_user(email: str, password: str) -> dict | None:
         "email": user["email"],
         "role": user["role"],
         "full_name": user.get("full_name"),
+        "is_active": user["is_active"],
+        "created_at": user.get("created_at"),
+        "last_login": user.get("last_login"),
     }
 
 
