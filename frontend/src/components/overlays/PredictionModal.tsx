@@ -24,10 +24,16 @@ function riskLabel(risk: number): string {
 
 export default function PredictionModal() {
   const selectedPoint = useAppStore((s) => s.selectedPoint);
-  const setSelectedPoint = useAppStore((s) => s.setSelectedPoint);
   const predictionMode = useAppStore((s) => s.predictionMode);
   const { data, isLoading } = usePrediction(selectedPoint?.lat ?? null, selectedPoint?.lon ?? null);
   const open = predictionMode && selectedPoint !== null;
+
+  // Close the modal and reset ALL prediction-related state atomically
+  const closeModal = () => {
+    useAppStore.setState({ predictionMode: false, selectedPoint: null });
+  };
+
+  console.log("[PredictionModal] Rendered. predictionMode:", predictionMode, "selectedPoint:", selectedPoint, "open:", open, "data:", !!data);
 
   return (
     <AnimatePresence>
@@ -37,7 +43,7 @@ export default function PredictionModal() {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="absolute inset-0 z-40 flex items-center justify-center bg-slate-900/10 backdrop-blur-sm"
-          onClick={() => setSelectedPoint(null)}
+          onClick={closeModal}
         >
           <motion.div
             initial={{ scale: 0.96, y: 8 }}
@@ -47,7 +53,7 @@ export default function PredictionModal() {
             className={`${PANEL} relative w-80 p-5`}
             onClick={(e) => e.stopPropagation()}
           >
-            <button onClick={() => setSelectedPoint(null)} className="absolute right-4 top-4 text-slate-400 hover:text-slate-600">
+            <button onClick={closeModal} className="absolute right-4 top-4 text-slate-400 hover:text-slate-600">
               <X className="h-4 w-4" />
             </button>
 
@@ -57,11 +63,29 @@ export default function PredictionModal() {
               <div className="flex justify-center py-8">
                 <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
               </div>
+            ) : data?.water_body ? (
+              <div className="flex flex-col items-center justify-center py-6 text-center space-y-3">
+                <div className="rounded-full bg-blue-100 p-3">
+                  <Droplets className="h-6 w-6 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="text-[14px] font-bold text-slate-800">Water Body Detected</h3>
+                  <p className="mt-1 text-[12px] text-slate-500">Fire predictions are disabled for coordinates located over water.</p>
+                </div>
+              </div>
             ) : data ? (
               <div className="space-y-4">
-                <div className="flex items-center gap-2 text-[13px] text-slate-500">
-                  <MapPin className="h-3.5 w-3.5" />
-                  <span className="font-mono text-slate-700">{selectedPoint.lat.toFixed(4)}, {selectedPoint.lon.toFixed(4)}</span>
+                <div className="flex flex-col gap-1">
+                  {selectedPoint?.featureName && (
+                    <div className="text-[14px] font-bold text-slate-800 flex items-center gap-2">
+                      {selectedPoint.featureType === 'water' ? '💧' : selectedPoint.featureType === 'building' ? '🏗' : '📍'}
+                      {selectedPoint.featureName}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 text-[13px] text-slate-500">
+                    <MapPin className="h-3.5 w-3.5" />
+                    <span className="font-mono text-slate-700">{selectedPoint?.lat.toFixed(4)}, {selectedPoint?.lon.toFixed(4)}</span>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">

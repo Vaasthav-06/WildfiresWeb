@@ -91,7 +91,7 @@ class WildfireEngineConfig:
 
     @property
     def default_model_path(self) -> Path:
-        return self.models_dir / "production_model.pkl"
+        return self.models_dir / "wildfire_ensemble.pkl"
 
 
 config = WildfireEngineConfig()

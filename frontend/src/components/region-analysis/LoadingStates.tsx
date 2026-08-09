@@ -20,7 +20,7 @@ export function Skeleton() {
   );
 }
 
-export function ErrorState({ message }: { message: string }) {
+export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center py-12 text-center">
       <div className="mb-3 rounded-full bg-red-50 p-3">
@@ -28,8 +28,16 @@ export function ErrorState({ message }: { message: string }) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
       </div>
-      <p className="text-[13px] font-medium text-slate-700">Failed to load data</p>
-      <p className="mt-1 text-[12px] text-slate-400">{message}</p>
+      <p className="text-[13px] font-medium text-slate-700">Failed to load prediction</p>
+      <p className="mt-1 text-[12px] text-slate-400 max-w-[240px] break-words">{message}</p>
+      {onRetry && (
+        <button
+          onClick={onRetry}
+          className="mt-4 rounded-lg bg-blue-600 px-4 py-1.5 text-[12px] font-semibold text-white hover:bg-blue-700 transition-colors"
+        >
+          Retry
+        </button>
+      )}
     </div>
   );
 }

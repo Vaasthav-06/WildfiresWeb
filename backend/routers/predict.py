@@ -8,6 +8,12 @@ logger = logging.getLogger(__name__)
 @router.get("/predict")
 def predict(lat: float = Query(...), lon: float = Query(...)):
     try:
+        from backend.services.water_mask import is_on_water
+        from wildfire_engine.inference.predictor import _is_on_land
+        
+        if is_on_water(lat, lon) or not _is_on_land(lat, lon):
+            return {"water_body": True, "message": "Prediction disabled over water bodies."}
+            
         from wildfire_engine.inference import predictor
         return predictor.predict(lat, lon)
     except Exception as e:

@@ -16,10 +16,14 @@ async function fetchRegionAnalysis(region: string): Promise<RegionAnalysisRespon
 export function useRegionAnalysis(region: string | null) {
   return useQuery({
     queryKey: ["region-analysis", region],
-    queryFn: () => fetchRegionAnalysis(region!),
+    queryFn: () => {
+      console.log(`[RegionAnalysis] Fetching data for region: ${region}`);
+      return fetchRegionAnalysis(region!);
+    },
     enabled: region !== null && region.length > 0,
-    staleTime: 120_000,
-    retry: 2,
+    staleTime: 30_000,
+    retry: 1,
     refetchOnWindowFocus: false,
+    throwOnError: false,
   });
 }

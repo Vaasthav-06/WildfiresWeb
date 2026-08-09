@@ -9,7 +9,7 @@ from .feature_engineering import build_feature_array
 from ..utils.filters import apply_snowy_region_filter
 
 _INDIA_POLY = None
-_GEOJSON_PATH = Path(__file__).resolve().parent.parent / "data" / "india.geojson"
+_GEOJSON_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "india.geojson"
 
 
 def _load_india_polygon():

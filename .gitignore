@@ -11,3 +11,4 @@ outputs/
 *.pkl
 !models/wildfire_ensemble.pkl
 .DS_Store
+venv/

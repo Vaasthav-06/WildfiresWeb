@@ -21,8 +21,8 @@ interface AppState {
   firmsVisible: boolean;
   setFirmsVisible: (v: boolean) => void;
 
-  selectedPoint: { lat: number; lon: number } | null;
-  setSelectedPoint: (p: { lat: number; lon: number } | null) => void;
+  selectedPoint: { lat: number; lon: number; featureName?: string; featureType?: string } | null;
+  setSelectedPoint: (pt: { lat: number; lon: number; featureName?: string; featureType?: string } | null) => void;
 
   activeReserve: string;
   setActiveReserve: (r: string) => void;

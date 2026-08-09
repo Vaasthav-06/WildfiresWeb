@@ -15,6 +15,7 @@ import Timeline from "@/components/region-analysis/Timeline";
 import PredictionExplanation from "@/components/region-analysis/PredictionExplanation";
 import { Skeleton, ErrorState, EmptyState } from "@/components/region-analysis/LoadingStates";
 import { PANEL } from "@/lib/constants";
+import PredictionModal from "@/components/overlays/PredictionModal";
 
 const RegionMap = dynamic(() => import("@/components/region-analysis/RegionMap"), {
   ssr: false,
@@ -23,7 +24,7 @@ const RegionMap = dynamic(() => import("@/components/region-analysis/RegionMap")
 
 export default function RegionAnalysisPage() {
   const [selected, setSelected] = useState<string>("corbett");
-  const { data, isLoading, error } = useRegionAnalysis(selected);
+  const { data, isLoading, error, refetch } = useRegionAnalysis(selected);
   const region = getRegion(selected);
 
   return (
@@ -36,7 +37,16 @@ export default function RegionAnalysisPage() {
         </motion.div>
 
         <div className="mt-5">
-          <RegionSelector active={selected} onChange={setSelected} />
+          <RegionSelector 
+            active={selected} 
+            onChange={(newRegion) => {
+              import("@/stores/appStore").then(({ useAppStore }) => {
+                useAppStore.getState().setSelectedPoint(null);
+                useAppStore.getState().setPredictionMode(false);
+              });
+              setSelected(newRegion);
+            }} 
+          />
         </div>
 
         {region && (
@@ -73,7 +83,7 @@ export default function RegionAnalysisPage() {
 
             {/* Data section */}
             {isLoading && <Skeleton />}
-            {error && <ErrorState message={(error as Error).message} />}
+            {error && <ErrorState message={(error as Error).message} onRetry={() => refetch()} />}
 
             {data && (
               <>
@@ -128,6 +138,7 @@ export default function RegionAnalysisPage() {
             </div>
           </motion.div>
         )}
+        <PredictionModal />
       </main>
     </div>
   );
