@@ -165,6 +165,7 @@ export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureCli
     fetch("/forestReserves.geojson")
       .then((r) => r.json())
       .then((data) => {
+        if (mapRef.current !== map) return;
         const layer = L.geoJSON(data as never, {
           style: () => ({
             color: "#16A34A",
@@ -175,11 +176,13 @@ export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureCli
           }),
           onEachFeature: (feature: any, l) => {
             const p = feature.properties || {};
-            l.bindTooltip(`${p.name}`, {
-              permanent: true,
-              direction: "center",
-              className: "map-label zone-label text-emerald-700",
-            });
+            if (p.name) {
+              l.bindTooltip(p.name, {
+                permanent: true,
+                direction: "center",
+                className: "map-label boundary-label",
+              });
+            }
             l.on("click", () => onFeatureClick?.(p));
           },
         });
@@ -197,6 +200,7 @@ export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureCli
     fetch("/gis/geo_fence_zones.geojson")
       .then((r) => r.json())
       .then((data) => {
+        if (mapRef.current !== map) return;
         const group = L.layerGroup();
         const filtered = (data.features as any[]).filter(
           (f: any) => f?.properties?.region_id === regionId
@@ -205,6 +209,14 @@ export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureCli
         filtered.forEach((feature: any) => {
           const zoneType = (feature.properties?.zone_type || "buffer_zone") as ZoneType;
           const style = ZONE_STYLE[zoneType] || ZONE_STYLE.buffer_zone;
+
+          // Map zone_type → CSS modifier class for colour-coded labels
+          const zoneCssClass: Record<string, string> = {
+            core_zone: "zone-core",
+            buffer_zone: "zone-buffer",
+            eco_sensitive_zone: "zone-eco",
+          };
+          const zoneClass = zoneCssClass[zoneType] || "zone-buffer";
 
           const l = L.geoJSON(feature as never, {
             style: () => ({
@@ -216,20 +228,13 @@ export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureCli
             }),
           });
           l.bindTooltip(
-            `${feature.properties?.name || style.label}`,
-            { 
-              permanent: true, 
-              direction: "center", 
-              className: "map-label zone-label",
+            feature.properties?.name || style.label,
+            {
+              permanent: true,
+              direction: "center",
+              className: `map-label zone-label ${zoneClass}`,
             }
           );
-          // Set text color dynamically using DOM node after tooltip is created
-          l.on('add', function() {
-            const tooltipNode = l.getTooltip()?.getElement();
-            if (tooltipNode) {
-              tooltipNode.style.color = style.color;
-            }
-          });
           l.on("click", () => onFeatureClick?.(feature.properties || {}));
           l.addTo(group);
         });
@@ -258,6 +263,7 @@ export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureCli
     fetch(`/gis/${regionId}_layers.geojson`)
       .then((r) => r.json())
       .then((data) => {
+        if (mapRef.current !== map) return;
         (data.features as any[]).forEach((feature: any) => {
           const type = feature.properties?.layer_type as string;
           const name = feature.properties?.name || "";
@@ -269,7 +275,7 @@ export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureCli
               pointToLayer: (_f, latlng) =>
                 L.circleMarker(latlng, { radius: 6, color: "#2563EB", fillColor: "#60A5FA", fillOpacity: 0.7, weight: 2 }),
             });
-            if (name) l.bindTooltip(name, { permanent: true, direction: "center", className: "map-label water-label uppercase" });
+            if (name) l.bindTooltip(name, { permanent: true, direction: "center", className: "map-label water-label" });
             l.addTo(wGroup);
           } else if (type === "building" || type === "road") {
             const l = L.geoJSON(feature as never, {
@@ -283,7 +289,7 @@ export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureCli
               pointToLayer: (_f, latlng) =>
                 L.circleMarker(latlng, { radius: 5, color: "#78350F", fillColor: "#FCD34D", fillOpacity: 0.8, weight: 2 }),
             });
-            if (name) l.bindTooltip(name, { permanent: true, direction: "center", className: "map-label road-label uppercase" });
+            if (name) l.bindTooltip(name, { permanent: true, direction: "center", className: "map-label road-label" });
             l.addTo(bGroup);
           } else if (["landmark", "entry_point", "watchtower", "office"].includes(type)) {
             if (geomType === "Point") {
