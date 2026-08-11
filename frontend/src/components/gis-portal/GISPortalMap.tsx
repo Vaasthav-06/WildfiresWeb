@@ -175,9 +175,10 @@ export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureCli
           }),
           onEachFeature: (feature: any, l) => {
             const p = feature.properties || {};
-            l.bindTooltip(`<b>${p.name}</b><br/>${p.state} · ${p.area}`, {
-              permanent: false,
+            l.bindTooltip(`${p.name}`, {
+              permanent: true,
               direction: "center",
+              className: "map-label zone-label text-emerald-700",
             });
             l.on("click", () => onFeatureClick?.(p));
           },
@@ -215,11 +216,20 @@ export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureCli
             }),
           });
           l.bindTooltip(
-            `<b>${feature.properties?.name || zoneType}</b><br/>${style.label} · ${
-              feature.properties?.protection_level || ""
-            }`,
-            { permanent: false, direction: "center" }
+            `${feature.properties?.name || style.label}`,
+            { 
+              permanent: true, 
+              direction: "center", 
+              className: "map-label zone-label",
+            }
           );
+          // Set text color dynamically using DOM node after tooltip is created
+          l.on('add', function() {
+            const tooltipNode = l.getTooltip()?.getElement();
+            if (tooltipNode) {
+              tooltipNode.style.color = style.color;
+            }
+          });
           l.on("click", () => onFeatureClick?.(feature.properties || {}));
           l.addTo(group);
         });
@@ -259,7 +269,7 @@ export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureCli
               pointToLayer: (_f, latlng) =>
                 L.circleMarker(latlng, { radius: 6, color: "#2563EB", fillColor: "#60A5FA", fillOpacity: 0.7, weight: 2 }),
             });
-            if (name) l.bindTooltip(`💧 ${name}`, { permanent: false, direction: "top", className: "bg-white/90 backdrop-blur-sm border-0 text-slate-700 text-xs font-medium px-2 py-1 shadow-sm rounded-md" });
+            if (name) l.bindTooltip(name, { permanent: true, direction: "center", className: "map-label water-label uppercase" });
             l.addTo(wGroup);
           } else if (type === "building" || type === "road") {
             const l = L.geoJSON(feature as never, {
@@ -273,7 +283,7 @@ export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureCli
               pointToLayer: (_f, latlng) =>
                 L.circleMarker(latlng, { radius: 5, color: "#78350F", fillColor: "#FCD34D", fillOpacity: 0.8, weight: 2 }),
             });
-            if (name) l.bindTooltip(type === "road" ? `🛤 ${name}` : `🏗 ${name}`, { permanent: false, direction: "top", className: "bg-white/90 backdrop-blur-sm border-0 text-slate-700 text-xs font-medium px-2 py-1 shadow-sm rounded-md" });
+            if (name) l.bindTooltip(name, { permanent: true, direction: "center", className: "map-label road-label uppercase" });
             l.addTo(bGroup);
           } else if (["landmark", "entry_point", "watchtower", "office"].includes(type)) {
             if (geomType === "Point") {
@@ -303,7 +313,7 @@ export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureCli
                 popupAnchor: [0, -32]
               });
               const marker = L.marker(coords, { icon });
-              if (name) marker.bindTooltip(name, { permanent: false, direction: "top", offset: [0, -20], className: "bg-white/90 backdrop-blur-sm border-0 text-slate-800 text-xs font-bold px-2 py-1 shadow-md rounded-md" });
+              if (name) marker.bindTooltip(name, { permanent: true, direction: "bottom", offset: [0, 5], className: "map-label landmark-label" });
               marker.on("click", () => onFeatureClick?.(feature.properties || {}));
               marker.addTo(lGroup);
             }
