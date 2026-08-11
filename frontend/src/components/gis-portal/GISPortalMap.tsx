@@ -24,12 +24,19 @@ interface Props {
   onFeatureClick?: (props: Record<string, string>) => void;
   alerts?: Alert[];
   onAlertClick?: (alert: Alert) => void;
+  /** Called when the user clicks a blank map area (for point-prediction mode) */
+  onMapClick?: (lat: number, lon: number) => void;
+  /** Fly to this location when it changes (e.g. from alert selection) */
+  flyToAlert?: { lat: number; lon: number } | null;
 }
 
-export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureClick, alerts = [], onAlertClick }: Props) {
+export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureClick, alerts = [], onAlertClick, onMapClick, flyToAlert }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const initialized = useRef(false);
+  // Keep latest onMapClick in a ref so the map click handler is never stale
+  const onMapClickRef = useRef(onMapClick);
+  useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
 
   const layerRefs = useRef<Record<string, L.Layer | L.LayerGroup | null>>({
     boundaries: null,
@@ -68,6 +75,11 @@ export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureCli
 
     L.control.attribution({ position: "bottomright", prefix: false }).addTo(map);
 
+    // Forward bare map clicks to the prediction handler (Analysis tab)
+    map.on("click", (e: L.LeafletMouseEvent) => {
+      onMapClickRef.current?.(e.latlng.lat, e.latlng.lng);
+    });
+
     mapRef.current = map;
 
     // Load all region boundaries
@@ -80,6 +92,12 @@ export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureCli
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ---- Fly to alert location ----
+  useEffect(() => {
+    if (!mapRef.current || !flyToAlert) return;
+    mapRef.current.flyTo([flyToAlert.lat, flyToAlert.lon], 14, { duration: 1 });
+  }, [flyToAlert]);
 
   // ---- Pan to active region ----
   useEffect(() => {

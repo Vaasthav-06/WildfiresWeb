@@ -5,10 +5,7 @@ import { usePathname } from "next/navigation";
 
 const links = [
   { href: "/", label: "Dashboard" },
-  { href: "/geo-fencing", label: "Geo-Fencing" },
-  { href: "/gis-portal", label: "GIS Portal" },
-  { href: "/region-analysis", label: "Region Analysis" },
-  { href: "/gis", label: "GIS Portal" },
+  { href: "/forest-ops", label: "Forest Operations" },
   { href: "/deforestation", label: "Deforestation" },
   { href: "/model-explanation", label: "Model Metrics" },
   { href: "/research", label: "Research" },
