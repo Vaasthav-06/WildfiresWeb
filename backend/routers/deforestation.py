@@ -58,6 +58,7 @@ class AnalyzeAreaRequest(BaseModel):
     lon1: float
     lat2: float
     lon2: float
+    geojson: dict | None = None
 
 
 @router.post("/analyze-area")
@@ -81,19 +82,36 @@ def analyze_area(body: AnalyzeAreaRequest):
             },
         }
 
-    intersected = query(
-        """SELECT z.id, z.name, z.type,
-                  ROUND(AVG(v.ndvi)::numeric, 4) as avg_ndvi,
-                  ROUND(AVG(v.vegetation_cover_pct)::numeric, 1) as avg_cover,
-                  ROUND(AVG(v.disturbance_pct)::numeric, 1) as avg_disturbance
-           FROM zones z
-           JOIN vegetation_history v ON z.id = v.zone_id
-           WHERE z.geom IS NOT NULL
-             AND ST_Intersects(z.geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))
-           GROUP BY z.id, z.name, z.type, v.year
-           ORDER BY z.name, v.year""",
-        (lon_min, lat_min, lon_max, lat_max),
-    )
+    if body.geojson:
+        import json
+        geom_str = json.dumps(body.geojson)
+        intersected = query(
+            """SELECT z.id, z.name, z.type,
+                      ROUND(AVG(v.ndvi)::numeric, 4) as avg_ndvi,
+                      ROUND(AVG(v.vegetation_cover_pct)::numeric, 1) as avg_cover,
+                      ROUND(AVG(v.disturbance_pct)::numeric, 1) as avg_disturbance
+               FROM zones z
+               JOIN vegetation_history v ON z.id = v.zone_id
+               WHERE z.geom IS NOT NULL
+                 AND ST_Intersects(z.geom, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))
+               GROUP BY z.id, z.name, z.type, v.year
+               ORDER BY z.name, v.year""",
+            (geom_str,),
+        )
+    else:
+        intersected = query(
+            """SELECT z.id, z.name, z.type,
+                      ROUND(AVG(v.ndvi)::numeric, 4) as avg_ndvi,
+                      ROUND(AVG(v.vegetation_cover_pct)::numeric, 1) as avg_cover,
+                      ROUND(AVG(v.disturbance_pct)::numeric, 1) as avg_disturbance
+               FROM zones z
+               JOIN vegetation_history v ON z.id = v.zone_id
+               WHERE z.geom IS NOT NULL
+                 AND ST_Intersects(z.geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))
+               GROUP BY z.id, z.name, z.type, v.year
+               ORDER BY z.name, v.year""",
+            (lon_min, lat_min, lon_max, lat_max),
+        )
 
     if not intersected:
         import random, math
