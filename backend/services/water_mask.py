@@ -32,12 +32,11 @@ def _get_water_geometries():
                             continue
                         
                         try:
-                            water_geometry = shape(geom)
-                            # A map line has no area, but it should not make locations hundreds
-                            # of metres away look like water. Keep the hit zone narrow for rivers.
-                            if water_geometry.geom_type in {"LineString", "MultiLineString"}:
-                                water_geometry = water_geometry.buffer(0.0005)
-                            water_polygons.append(water_geometry)
+                            s = shape(geom)
+                            # If it's a LineString (like a river), buffer it by ~500m (0.005 deg)
+                            # If it's a Polygon, buffering by 0.005 is fine too to catch near-water edges
+                            buffered_geom = s.buffer(0.005)
+                            water_polygons.append(buffered_geom)
                         except Exception as e:
                             logger.error(f"Error parsing geometry in {filepath.name}: {e}")
         except Exception as e:
@@ -52,7 +51,7 @@ def is_on_water(lat: float, lon: float) -> bool:
     try:
         pt = Point(lon, lat)
         geoms = _get_water_geometries()
-        return any(g.covers(pt) for g in geoms)
+        return any(g.contains(pt) for g in geoms)
     except Exception as e:
         logger.error(f"Error checking water intersection: {e}")
         return False

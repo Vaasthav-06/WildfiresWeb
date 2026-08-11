@@ -31,40 +31,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const saved = localStorage.getItem("wf_token");
-    const refresh = localStorage.getItem("wf_refresh");
-    let restored = false;
-    const restoreSession = async () => {
-      if (!saved) return;
-      const me = await fetch(api("/api/v1/auth/me"), { headers: { Authorization: `Bearer ${saved}` } });
-      if (me.ok) {
-        setToken(saved);
-        setUser(await me.json());
-        restored = true;
-        return;
-      }
-      if (!refresh) return;
-      const renewed = await fetch(api("/api/v1/auth/refresh"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: refresh }),
-      });
-      if (!renewed.ok) return;
-      const data = await renewed.json();
-      localStorage.setItem("wf_token", data.access_token);
-      localStorage.setItem("wf_refresh", data.refresh_token);
-      setToken(data.access_token);
-      setUser(data.user);
-      restored = true;
-    };
-    restoreSession()
-      .catch(() => undefined)
-      .finally(() => {
-        if (!restored) {
-          localStorage.removeItem("wf_token");
-          localStorage.removeItem("wf_refresh");
-        }
-        setIsLoading(false);
-      });
+    if (saved) {
+      setToken(saved);
+      fetch(api("/api/v1/auth/me"), { headers: { Authorization: `Bearer ${saved}` } })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((u) => { if (u) setUser(u); else localStorage.removeItem("wf_token"); })
+        .finally(() => setIsLoading(false));
+    } else {
+      setIsLoading(false);
+    }
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -79,14 +54,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const data = await r.json();
     localStorage.setItem("wf_token", data.access_token);
-    localStorage.setItem("wf_refresh", data.refresh_token);
     setToken(data.access_token);
     setUser(data.user);
   }, []);
 
   const logout = useCallback(() => {
     localStorage.removeItem("wf_token");
-    localStorage.removeItem("wf_refresh");
     setToken(null);
     setUser(null);
   }, []);

@@ -14,7 +14,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   if (isAuthenticated) {
-    router.push("/gis");
+    router.push("/admin");
     return null;
   }
 
@@ -24,7 +24,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      router.push("/gis");
+      router.push("/admin");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {

@@ -3,19 +3,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/constants";
 
-export interface PredictionResponse {
-  wildfire_risk?: number;
-  temperature?: number;
-  humidity?: number;
-  wind?: number;
-  water_body?: boolean;
-  message?: string;
-}
-
-async function fetchPrediction(lat: number, lon: number): Promise<PredictionResponse> {
+async function fetchPrediction(lat: number, lon: number) {
   const res = await fetch(api(`/api/v1/predict?lat=${lat}&lon=${lon}`));
   if (!res.ok) throw new Error("Prediction failed");
-  return (await res.json()) as PredictionResponse;
+  return res.json();
 }
 
 export function usePrediction(lat: number | null, lon: number | null) {

@@ -17,7 +17,6 @@ def _check_db():
 
 @router.post("/login")
 def login(req: LoginRequest):
-    _check_db()
     user = authenticate_user(req.email, req.password)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
@@ -38,7 +37,6 @@ def login(req: LoginRequest):
 
 @router.post("/refresh", response_model=TokenResponse)
 def refresh(req: RefreshRequest):
-    _check_db()
     payload = decode_token(req.refresh_token)
     if payload is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
@@ -73,7 +71,7 @@ def me(user: dict = Depends(get_current_user)):
 
 @router.post("/users", response_model=UserOut)
 def add_user(req: UserCreate, _: dict = Depends(require_admin)):
-    _check_db()
+    existing = get_user_by_id(0)  # check email
     rows = list_users()
     if any(u["email"] == req.email.lower().strip() for u in rows):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already exists")
@@ -91,7 +89,6 @@ def add_user(req: UserCreate, _: dict = Depends(require_admin)):
 
 @router.get("/users", response_model=list[UserOut])
 def get_users(_: dict = Depends(require_admin)):
-    _check_db()
     users = list_users()
     return [
         UserOut(id=u["id"], email=u["email"], role=u["role"],
@@ -103,7 +100,6 @@ def get_users(_: dict = Depends(require_admin)):
 
 @router.put("/users/{user_id}", response_model=UserOut)
 def edit_user(user_id: int, body: dict, _: dict = Depends(require_admin)):
-    _check_db()
     ok = update_user(user_id, **body)
     if not ok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")

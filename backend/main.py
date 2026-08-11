@@ -61,7 +61,6 @@ from backend.routers.alerts import router as alerts_router
 from backend.routers.auth import router as auth_router
 from backend.routers.admin import router as admin_router
 from backend.routers.deforestation import router as deforestation_router
-from backend.routers.chat import router as chat_router
 
 app.include_router(heatmap_router)
 app.include_router(predict_router)
@@ -74,24 +73,8 @@ app.include_router(alerts_router)
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(deforestation_router)
-app.include_router(chat_router)
 
 
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "wildfires-india-api"}
-
-
-def serve() -> None:
-    """Run the API when invoked as a Python module."""
-    import uvicorn
-
-    uvicorn.run(
-        "backend.main:app",
-        host=os.environ.get("HOST", "0.0.0.0"),
-        port=int(os.environ.get("PORT", "8001")),
-    )
-
-
-if __name__ == "__main__":
-    serve()
