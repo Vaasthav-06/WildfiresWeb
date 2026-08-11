@@ -81,7 +81,7 @@ export default function PredictionModal() {
 
             <p className="mb-4 text-[11px] font-bold uppercase tracking-widest text-slate-400">Point Analysis</p>
 
-            {!nearest && !isSea && (
+            {!nearest && !isSea ? (
               <div className="flex justify-center py-8">
                 <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
               </div>
@@ -130,7 +130,7 @@ export default function PredictionModal() {
                   </div>
                 )}
               </div>
-            )}
+            ) : null}
 
             {nearest && !isSea && (
               <div className="space-y-4">
