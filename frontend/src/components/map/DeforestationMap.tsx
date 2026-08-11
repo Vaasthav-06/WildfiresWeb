@@ -15,6 +15,15 @@ interface Props {
   onDrawEnd: () => void;
 }
 
+let mapDataPromise: Promise<ZoneFeature[]> | null = null;
+
+function getMapData(): Promise<ZoneFeature[]> {
+  mapDataPromise ??= fetch(api("/api/v1/deforestation/map-data"))
+    .then((response) => (response.ok ? response.json() : []))
+    .catch(() => []);
+  return mapDataPromise;
+}
+
 export default function DeforestationMap({ onZonesLoaded, onZoneClick, onRectDraw, drawMode, onDrawEnd }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -22,6 +31,8 @@ export default function DeforestationMap({ onZonesLoaded, onZoneClick, onRectDra
   const persistentRect = useRef<L.Rectangle | null>(null);
   const drawStart = useRef<L.LatLng | null>(null);
   const drawModeRef = useRef(false);
+  const drawFrame = useRef<number | null>(null);
+  const pendingPoint = useRef<L.LatLng | null>(null);
 
   useEffect(() => { drawModeRef.current = drawMode; }, [drawMode]);
 
@@ -42,8 +53,7 @@ export default function DeforestationMap({ onZonesLoaded, onZoneClick, onRectDra
     L.control.attribution({ position: "bottomright", prefix: false }).addTo(map);
     mapRef.current = map;
 
-    fetch(api("/api/v1/deforestation/map-data"))
-      .then((r) => (r.ok ? r.json() : []))
+    getMapData()
       .then((zones: ZoneFeature[]) => {
         const distinct = zones.filter((z) => z.type === "reserve");
         onZonesLoaded(distinct);
@@ -79,10 +89,16 @@ export default function DeforestationMap({ onZonesLoaded, onZoneClick, onRectDra
     map.on("mousemove", (e: L.LeafletMouseEvent) => {
       if (!drawModeRef.current || !drawStart.current) return;
       L.DomEvent.preventDefault(e.originalEvent as Event);
-      if (rectRef.current) map.removeLayer(rectRef.current);
-      rectRef.current = L.rectangle(L.latLngBounds(drawStart.current, e.latlng), {
-        color: "#2563EB", weight: 2, fillColor: "#3B82F6", fillOpacity: 0.1, dashArray: "6 3",
-      }).addTo(map);
+      pendingPoint.current = e.latlng;
+      if (drawFrame.current !== null) return;
+      drawFrame.current = requestAnimationFrame(() => {
+        drawFrame.current = null;
+        if (!drawStart.current || !pendingPoint.current) return;
+        if (rectRef.current) map.removeLayer(rectRef.current);
+        rectRef.current = L.rectangle(L.latLngBounds(drawStart.current, pendingPoint.current), {
+          color: "#2563EB", weight: 2, fillColor: "#3B82F6", fillOpacity: 0.1, dashArray: "6 3",
+        }).addTo(map);
+      });
     });
     map.on("mouseup", (e: L.LeafletMouseEvent) => {
       if (!drawModeRef.current || !drawStart.current) return;
@@ -105,7 +121,11 @@ export default function DeforestationMap({ onZonesLoaded, onZoneClick, onRectDra
       onDrawEnd();
     });
 
-    return () => { map.remove(); mapRef.current = null; };
+    return () => {
+      if (drawFrame.current !== null) cancelAnimationFrame(drawFrame.current);
+      map.remove();
+      mapRef.current = null;
+    };
   }, []);
 
   return <div ref={containerRef} className="absolute inset-0 z-0" />;

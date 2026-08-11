@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { REGIONS } from "@/lib/regions";
 import { ZONE_STYLE } from "@/lib/gisLayers";
+import { useAlerts, useAlertSummary, type Alert } from "@/hooks/useAlerts";
 
 const GISPortalMap = dynamic(
   () => import("@/components/gis-portal/GISPortalMap"),
@@ -31,6 +32,7 @@ const LAYER_CONFIG: Array<{ key: OverlayKey; label: string; icon: React.ElementT
   { key: "water", label: "Water Bodies", icon: Droplets, color: "#2563EB" },
   { key: "buildings", label: "Infrastructure", icon: Building2, color: "#D97706" },
   { key: "locations", label: "Landmarks & Posts", icon: MapPin, color: "#7C3AED" },
+  { key: "alerts", label: "Active Fire Alerts", icon: AlertTriangle, color: "#DC2626" },
 ];
 
 const ZONE_LEGEND = [
@@ -85,10 +87,12 @@ export default function GISPortalPage() {
     water: true,
     buildings: true,
     locations: true,
-    alerts: false,
+    alerts: true,
   });
   const [selectedFeature, setSelectedFeature] = useState<Record<string, string> | null>(null);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const { data: alerts = [] } = useAlerts();
+  const { data: alertSummary = [] } = useAlertSummary();
 
   const region = REGIONS.find((r) => r.id === activeRegion)!;
   const admin = REGION_ADMIN[activeRegion];
@@ -99,6 +103,16 @@ export default function GISPortalPage() {
 
   const handleFeatureClick = useCallback((props: Record<string, string>) => {
     setSelectedFeature(props);
+  }, []);
+
+  const handleAlertClick = useCallback((alert: Alert) => {
+    setSelectedFeature({
+      name: alert.zone_name,
+      layer_type: "Fire alert",
+      description: `${alert.date} · ${alert.confidence.toUpperCase()} confidence`,
+      protection_level: `FRP ${alert.frp.toFixed(1)} MW`,
+      state: alert.state,
+    });
   }, []);
 
   return (
@@ -259,6 +273,8 @@ export default function GISPortalPage() {
           activeRegion={activeRegion}
           visibleLayers={visibleLayers}
           onFeatureClick={handleFeatureClick}
+          alerts={alerts}
+          onAlertClick={handleAlertClick}
         />
 
         {/* Active Region Badge */}
@@ -333,6 +349,12 @@ export default function GISPortalPage() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        <div className="absolute bottom-5 left-4 z-[500] rounded-xl bg-slate-900/90 px-4 py-3 text-white shadow-xl ring-1 ring-white/10">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Geo-Fence Monitoring</p>
+          <p className="mt-1 text-[13px] font-semibold">{alerts.length} active detection{alerts.length === 1 ? "" : "s"}</p>
+          <p className="text-[11px] text-slate-400">{alertSummary.filter((zone) => zone.status !== "safe").length} monitored zone{alertSummary.filter((zone) => zone.status !== "safe").length === 1 ? "" : "s"} under watch</p>
+        </div>
 
         {/* Right panel toggle */}
         <button

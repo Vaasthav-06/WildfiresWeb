@@ -75,7 +75,7 @@ class WildfirePredictor:
         risk = apply_snowy_region_filter(lat, lon, temp, raw_risk)
 
         return {
-            "wildfire_risk": round(risk, 2),
+            "wildfire_risk": float(round(risk, 2)),
             "temperature": temp,
             "humidity": humidity,
             "wind": wind,
@@ -104,7 +104,7 @@ class WildfirePredictor:
             results.append({
                 "lat": lat,
                 "lon": lon,
-                "risk": round(risk, 2),
+                "risk": float(round(risk, 2)),
             })
 
         return results
@@ -166,7 +166,7 @@ class WildfirePredictor:
                     all_points.append({
                         "lat": lat,
                         "lon": lon,
-                        "risk": round(risk, 2),
+                        "risk": float(round(risk, 2)),
                     })
 
         return all_points

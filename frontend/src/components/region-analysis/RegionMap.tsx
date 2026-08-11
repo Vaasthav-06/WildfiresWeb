@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useAppStore } from "@/stores/appStore";
@@ -35,7 +35,7 @@ export default function RegionMap({ regionId, center, bounds }: Props) {
   const waterLayer = useRef<L.LayerGroup | null>(null);
   const buildingsLayer = useRef<L.LayerGroup | null>(null);
   const locationsLayer = useRef<L.LayerGroup | null>(null);
-  const markerRef = useRef<L.CircleMarker | null>(null);
+
 
   const [visibleLayers, setVisibleLayers] = useState<Record<LayerKey, boolean>>({
     boundary: true,
@@ -141,6 +141,14 @@ export default function RegionMap({ regionId, center, bounds }: Props) {
           setNoFeatureWarning(false);
         }
 
+        const layer = L.geoJSON(filtered as any, {
+          style: { color: "#3B82F6", weight: 3, fillOpacity: 0.05, dashArray: "5 5" }
+        });
+        
+        layer.addTo(mapRef.current!);
+        boundaryLayer.current = layer;
+      })
+      .catch((err) => console.error(err));
   }, [regionId]);
 
   // --- Load geo-fence zones ---

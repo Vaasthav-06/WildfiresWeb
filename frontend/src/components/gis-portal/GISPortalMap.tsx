@@ -3,8 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { ZONE_STYLE, REGION_LAYER_FILES, type ZoneType } from "@/lib/gisLayers";
 import { REGIONS } from "@/lib/regions";
+import type { Alert } from "@/hooks/useAlerts";
 
 type OverlayKey =
   | "boundaries"
@@ -18,9 +22,11 @@ interface Props {
   activeRegion: string;
   visibleLayers: Record<OverlayKey, boolean>;
   onFeatureClick?: (props: Record<string, string>) => void;
+  alerts?: Alert[];
+  onAlertClick?: (alert: Alert) => void;
 }
 
-export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureClick }: Props) {
+export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureClick, alerts = [], onAlertClick }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const initialized = useRef(false);
@@ -108,6 +114,35 @@ export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureCli
     });
   }, [visibleLayers]);
 
+  // ---- Geo-fence fire alerts ----
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const previous = layerRefs.current.alerts;
+    if (previous && map.hasLayer(previous)) map.removeLayer(previous);
+
+    const group = L.markerClusterGroup({ maxClusterRadius: 40 });
+    alerts.forEach((alert) => {
+      const marker = L.circleMarker([alert.lat, alert.lon], {
+        radius: 8,
+        color: "#FFFFFF",
+        weight: 2,
+        fillColor: "#DC2626",
+        fillOpacity: 0.95,
+      });
+      marker.bindTooltip(
+        `<b>${alert.zone_name}</b><br/>FRP: ${alert.frp.toFixed(1)} MW · ${alert.date}`,
+        { direction: "top", offset: [0, -8], permanent: false },
+      );
+      marker.on("click", () => onAlertClick?.(alert));
+      marker.addTo(group);
+    });
+
+    layerRefs.current.alerts = group;
+    if (visibleLayers.alerts) group.addTo(map);
+  }, [alerts, onAlertClick, visibleLayers.alerts]);
+
   function loadBoundaries(map: L.Map) {
     fetch("/forestReserves.geojson")
       .then((r) => r.json())
@@ -190,7 +225,7 @@ export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureCli
 
     const wGroup = L.layerGroup();
     const bGroup = L.layerGroup();
-    const lGroup = L.layerGroup();
+    const lGroup = L.markerClusterGroup({ maxClusterRadius: 50, spiderfyOnMaxZoom: true });
 
     fetch(`/gis/${regionId}_layers.geojson`)
       .then((r) => r.json())
@@ -206,7 +241,7 @@ export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureCli
               pointToLayer: (_f, latlng) =>
                 L.circleMarker(latlng, { radius: 6, color: "#2563EB", fillColor: "#60A5FA", fillOpacity: 0.7, weight: 2 }),
             });
-            if (name) l.bindTooltip(`💧 ${name}`, { permanent: true, direction: "top", className: "bg-white/80 backdrop-blur-sm border-0 text-slate-700 text-xs font-medium px-2 py-1 shadow-sm rounded-md" });
+            if (name) l.bindTooltip(`💧 ${name}`, { permanent: false, direction: "top", className: "bg-white/90 backdrop-blur-sm border-0 text-slate-700 text-xs font-medium px-2 py-1 shadow-sm rounded-md" });
             l.addTo(wGroup);
           } else if (type === "building" || type === "road") {
             const l = L.geoJSON(feature as never, {
@@ -220,28 +255,37 @@ export default function GISPortalMap({ activeRegion, visibleLayers, onFeatureCli
               pointToLayer: (_f, latlng) =>
                 L.circleMarker(latlng, { radius: 5, color: "#78350F", fillColor: "#FCD34D", fillOpacity: 0.8, weight: 2 }),
             });
-            if (name) l.bindTooltip(type === "road" ? `🛤 ${name}` : `🏗 ${name}`, { permanent: true, direction: "top", className: "bg-white/80 backdrop-blur-sm border-0 text-slate-700 text-xs font-medium px-2 py-1 shadow-sm rounded-md" });
+            if (name) l.bindTooltip(type === "road" ? `🛤 ${name}` : `🏗 ${name}`, { permanent: false, direction: "top", className: "bg-white/90 backdrop-blur-sm border-0 text-slate-700 text-xs font-medium px-2 py-1 shadow-sm rounded-md" });
             l.addTo(bGroup);
           } else if (["landmark", "entry_point", "watchtower", "office"].includes(type)) {
-            const icons: Record<string, string> = {
-              entry_point: "🚧",
-              watchtower: "🗼",
-              office: "🏢",
-              landmark: "📍",
-            };
             if (geomType === "Point") {
               const coords: [number, number] = [
                 feature.geometry.coordinates[1],
                 feature.geometry.coordinates[0],
               ];
+              
+              const typeColors: Record<string, string> = {
+                entry_point: "#f59e0b", // amber
+                watchtower: "#8b5cf6", // violet
+                office: "#3b82f6",     // blue
+                landmark: "#f43f5e",   // rose
+              };
+              const pinColor = typeColors[type] || "#64748b";
+              
+              const svg = `<svg width="24" height="32" viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 0C5.373 0 0 5.373 0 12C0 21 12 32 12 32C12 32 24 21 24 12C24 5.373 18.627 0 12 0Z" fill="${pinColor}" stroke="#FFFFFF" stroke-width="1.5" style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.3));"/>
+                <circle cx="12" cy="11" r="5" fill="#FFFFFF"/>
+              </svg>`;
+
               const icon = L.divIcon({
-                html: `<div style="font-size:18px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.5))">${icons[type] || "📍"}</div>`,
-                className: "",
-                iconSize: [24, 24],
-                iconAnchor: [12, 12],
+                html: svg,
+                className: "custom-svg-pin",
+                iconSize: [24, 32],
+                iconAnchor: [12, 32],
+                popupAnchor: [0, -32]
               });
               const marker = L.marker(coords, { icon });
-              if (name) marker.bindTooltip(name, { permanent: true, direction: "top", offset: [0, -14], className: "bg-white/80 backdrop-blur-sm border-0 text-slate-800 text-xs font-bold px-2 py-1 shadow-md rounded-md" });
+              if (name) marker.bindTooltip(name, { permanent: false, direction: "top", offset: [0, -20], className: "bg-white/90 backdrop-blur-sm border-0 text-slate-800 text-xs font-bold px-2 py-1 shadow-md rounded-md" });
               marker.on("click", () => onFeatureClick?.(feature.properties || {}));
               marker.addTo(lGroup);
             }
